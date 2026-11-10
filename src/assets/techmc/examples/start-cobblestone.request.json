@@ -1,0 +1,8 @@
+{
+  "protocol_version": "1.0",
+  "request_id": "start-cobblestone-1",
+  "op": "task.start",
+  "params": {
+    "task_id": "medium.cobblestone.v1"
+  }
+}

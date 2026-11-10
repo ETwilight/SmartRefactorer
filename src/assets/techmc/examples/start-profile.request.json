@@ -1,0 +1,6 @@
+{
+  "protocol_version": "1.0",
+  "request_id": "start-wool-profile-1",
+  "op": "task.start",
+  "params": {"task_id": "easy.wool.v1", "profile_id": "red_wool"}
+}

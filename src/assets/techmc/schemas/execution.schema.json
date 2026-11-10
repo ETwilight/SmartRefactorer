@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "state": {
+      "enum": [
+        "not_started",
+        "completed",
+        "running",
+        "unknown"
+      ]
+    },
+    "retry": {
+      "enum": [
+        "none",
+        "same_request_only",
+        "observe_before_new_request",
+        "read_only_new_request",
+        "new_evaluation"
+      ]
+    },
+    "next_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "state",
+    "retry",
+    "next_steps"
+  ],
+  "additionalProperties": false
+}

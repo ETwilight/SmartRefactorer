@@ -1,0 +1,8 @@
+{
+  "protocol_version": "1.0",
+  "request_id": "wiki-information-example-1",
+  "op": "action.execute",
+  "params": {
+    "action": {"method": "wiki.search", "side": "local", "params": {"query": "piston", "limit": 3}, "executor": "direct"}
+  }
+}

@@ -1,0 +1,1178 @@
+{
+  "protocol_version": "1.0",
+  "language": "en",
+  "difficulty": "expert",
+  "tasks": [
+    {
+      "id": "expert.earth_factory.v1",
+      "title": "Integrated Mud, Clay and Terracotta Production",
+      "description": "Build one selectable processing plant for mud, clay blocks and terracotta. Supply raw material at one input. Automatically distribute materials, provide operating resources, process the selected product and collect it in accessible storage.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:mud",
+        "minecraft:clay",
+        "minecraft:terracotta"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:mud",
+            "minecraft:clay",
+            "minecraft:terracotta"
+          ],
+          "earth_inputs": [
+            "minecraft:dirt",
+            "minecraft:coarse_dirt",
+            "minecraft:rooted_dirt",
+            "minecraft:glass_bottle"
+          ],
+          "required_recipe_observers": [
+            "cooking",
+            "crafting"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 24000,
+        "window_ticks": 72000,
+        "min_net_items": 3456,
+        "min_per_game_hour": 3456.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:dirt",
+        "minecraft:coarse_dirt",
+        "minecraft:rooted_dirt"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "expert",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout measurement; initially stored products do not count as new output.",
+        "Do not manually replenish materials or modify the machine during evaluation.",
+        "The same machine must support every published product without reconstruction or manual movement between independent processing stations.",
+        "Water and bottles must be supplied automatically. Fuel must start empty and be produced and supplied automatically after warmup.",
+        "Account for raw material, intermediate products and collected output using the actual vanilla recipes.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Supply preloaded operating materials in shulker boxes at one input location. The machine must automatically unpack and distribute them; no preloading separate processing nodes. Empty box stock is permitted without an upstream shell farm.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "machine_modes",
+          "recipe_accounting",
+          "single_input",
+          "fuel_autonomy",
+          "operating_resources",
+          "shared_processing"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "At most one evaluator player may provide only the declared necessary interaction."
+      },
+      "curriculum": {
+        "stage": 4,
+        "order": 59,
+        "prerequisites": [
+          "easy.mud.v1"
+        ],
+        "focus": "Satisfy the published production and operating requirements."
+      },
+      "single_input_items": [
+        "minecraft:dirt",
+        "minecraft:coarse_dirt",
+        "minecraft:rooted_dirt",
+        "minecraft:glass_bottle"
+      ],
+      "mode_requirements": {
+        "products": [
+          "minecraft:mud",
+          "minecraft:clay",
+          "minecraft:terracotta"
+        ],
+        "shared_processing": true,
+        "rebuild_between_modes": false,
+        "max_simultaneous_players": 1,
+        "measurement_per_mode": true
+      },
+      "shulker_io": {
+        "output": true,
+        "input": true
+      },
+      "earth_inputs": [
+        "minecraft:dirt",
+        "minecraft:coarse_dirt",
+        "minecraft:rooted_dirt",
+        "minecraft:glass_bottle"
+      ],
+      "required_recipe_observers": [
+        "cooking",
+        "crafting"
+      ],
+      "material_driver_items": [
+        "minecraft:dirt",
+        "minecraft:coarse_dirt",
+        "minecraft:rooted_dirt",
+        "minecraft:mud"
+      ],
+      "mode_trials": [
+        {
+          "id": "minecraft:mud",
+          "products": [
+            "minecraft:mud"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:clay",
+          "products": [
+            "minecraft:clay"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:terracotta",
+          "products": [
+            "minecraft:terracotta"
+          ],
+          "kind": "continuous"
+        }
+      ],
+      "mandatory_review_checks": [
+        "shared_processing"
+      ]
+    },
+    {
+      "id": "expert.heads_and_discs.v1",
+      "title": "Integrated Mob Head and Music Disc Farm",
+      "description": "Build one integrated farm that continuously produces the three published mob heads and the twelve published creeper-drop music discs and collects them in accessible storage. Use shared mob supply and handling; independent head and disc farms are not accepted.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:creeper_head",
+        "minecraft:zombie_head",
+        "minecraft:skeleton_skull",
+        "minecraft:music_disc_13",
+        "minecraft:music_disc_cat",
+        "minecraft:music_disc_blocks",
+        "minecraft:music_disc_chirp",
+        "minecraft:music_disc_far",
+        "minecraft:music_disc_mall",
+        "minecraft:music_disc_mellohi",
+        "minecraft:music_disc_stal",
+        "minecraft:music_disc_strad",
+        "minecraft:music_disc_ward",
+        "minecraft:music_disc_11",
+        "minecraft:music_disc_wait"
+      ],
+      "product_profiles": [
+        {
+          "id": "combined",
+          "products": [
+            "minecraft:creeper_head",
+            "minecraft:zombie_head",
+            "minecraft:skeleton_skull",
+            "minecraft:music_disc_13",
+            "minecraft:music_disc_cat",
+            "minecraft:music_disc_blocks",
+            "minecraft:music_disc_chirp",
+            "minecraft:music_disc_far",
+            "minecraft:music_disc_mall",
+            "minecraft:music_disc_mellohi",
+            "minecraft:music_disc_stal",
+            "minecraft:music_disc_strad",
+            "minecraft:music_disc_ward",
+            "minecraft:music_disc_11",
+            "minecraft:music_disc_wait"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 3,
+        "min_per_game_hour": 3.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:trident"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "expert",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain continuous new collected output; preloaded output and finite preplaced target mobs do not count as a production source.",
+        "The environment maintains an Overworld thunderstorm throughout warmup and measurement.",
+        "An initial skeleton and supporting non-product mobs are permitted. At most one evaluator player may provide the declared use action; no evaluator player may attack or place target mobs.",
+        "Only the published vanilla creeper-drop discs are required. Random output need not follow fixed proportions.",
+        "Head and disc production must belong to the same machine; control changes may not reconstruct it.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "player_action_inventory",
+          "head_weather_conditions",
+          "integrated_head_disc_machine"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "At most one stationary player may provide spawning presence and a declared use action when required by the machine. No player may place or kill target mobs manually."
+      },
+      "curriculum": {
+        "stage": 4,
+        "order": 60,
+        "prerequisites": [],
+        "focus": "Integrate continuous head and disc production with shared mob handling."
+      },
+      "required_dimension": "minecraft:overworld",
+      "mode_requirements": {
+        "shared_mob_supply": true,
+        "shared_handling": true,
+        "rebuild_between_modes": false,
+        "max_simultaneous_players": 1
+      },
+      "mandatory_review_checks": [
+        "integrated_head_disc_machine"
+      ]
+    },
+    {
+      "id": "expert.furnace_array.v1",
+      "title": "Compact 320-Furnace Array",
+      "description": "Operate 320 furnaces within a single 3-by-3-by-3 subchunk envelope, including all input, fuel handling and output equipment. Sustain the published total and per-furnace throughput. Automatically unpack supplied inputs and fuel and pack the newly smelted output into shulker boxes.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:stone"
+      ],
+      "product_profiles": [
+        {
+          "id": "stone",
+          "products": [
+            "minecraft:stone"
+          ],
+          "processing_inputs": [
+            "minecraft:cobblestone",
+            "minecraft:coal"
+          ],
+          "required_recipe_observers": [
+            "cooking"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 12000,
+        "window_ticks": 36000,
+        "min_net_items": 50000,
+        "min_per_game_hour": 100000,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "expert",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "The complete machine must fit within three contiguous aligned 16-block sections on each axis in one dimension.",
+        "Exactly 320 ordinary furnaces must each sustain at least 300 completed output items per game hour in every measurement segment.",
+        "Raw material and fuel may be supplied in shulker boxes through one input location; no manual replenishment during operation.",
+        "Automatically pack collected output into shulker-box items. Full and partial boxes count by actual contents; empty shells earn no output credit. Empty shells may be supplied initially without an upstream shell farm.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "recipe_accounting",
+          "single_input",
+          "furnace_array"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 4,
+        "order": 61,
+        "prerequisites": [
+          "medium.stone_processing.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "processing_inputs": [
+        "minecraft:cobblestone",
+        "minecraft:coal"
+      ],
+      "single_input_items": [
+        "minecraft:cobblestone",
+        "minecraft:coal"
+      ],
+      "required_recipe_observers": [
+        "cooking"
+      ],
+      "shulker_io": {
+        "input": true,
+        "output": true
+      },
+      "machine_limits": {
+        "max_subchunks_per_axis": 3,
+        "furnaces": 320,
+        "min_items_per_furnace_per_game_hour": 300
+      }
+    },
+    {
+      "id": "expert.colored_concrete.v1",
+      "title": "Selectable Concrete Color Production",
+      "description": "Build one machine that can continuously deliver any of the sixteen concrete colors selected through its controls. Demonstrate successive color changes and deliver the requested concrete to accessible storage without reconstructing the machine.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:white_concrete",
+        "minecraft:orange_concrete",
+        "minecraft:magenta_concrete",
+        "minecraft:light_blue_concrete",
+        "minecraft:yellow_concrete",
+        "minecraft:lime_concrete",
+        "minecraft:pink_concrete",
+        "minecraft:gray_concrete",
+        "minecraft:light_gray_concrete",
+        "minecraft:cyan_concrete",
+        "minecraft:purple_concrete",
+        "minecraft:blue_concrete",
+        "minecraft:brown_concrete",
+        "minecraft:green_concrete",
+        "minecraft:red_concrete",
+        "minecraft:black_concrete"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:white_concrete",
+            "minecraft:orange_concrete",
+            "minecraft:magenta_concrete",
+            "minecraft:light_blue_concrete",
+            "minecraft:yellow_concrete",
+            "minecraft:lime_concrete",
+            "minecraft:pink_concrete",
+            "minecraft:gray_concrete",
+            "minecraft:light_gray_concrete",
+            "minecraft:cyan_concrete",
+            "minecraft:purple_concrete",
+            "minecraft:blue_concrete",
+            "minecraft:brown_concrete",
+            "minecraft:green_concrete",
+            "minecraft:red_concrete",
+            "minecraft:black_concrete"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 20736,
+        "min_per_game_hour": 20736.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:white_concrete_powder",
+        "minecraft:orange_concrete_powder",
+        "minecraft:magenta_concrete_powder",
+        "minecraft:light_blue_concrete_powder",
+        "minecraft:yellow_concrete_powder",
+        "minecraft:lime_concrete_powder",
+        "minecraft:pink_concrete_powder",
+        "minecraft:gray_concrete_powder",
+        "minecraft:light_gray_concrete_powder",
+        "minecraft:cyan_concrete_powder",
+        "minecraft:purple_concrete_powder",
+        "minecraft:blue_concrete_powder",
+        "minecraft:brown_concrete_powder",
+        "minecraft:green_concrete_powder",
+        "minecraft:red_concrete_powder",
+        "minecraft:black_concrete_powder"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "expert",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout measurement; initially stored products do not count as new output.",
+        "Do not manually replenish materials or modify the machine during evaluation.",
+        "All sixteen color modes must operate in the same machine, including returning to a previously tested color.",
+        "Initial material may start production; no manual restocking or placement of the measured output is permitted.",
+        "Account for total source material, intermediate stocks and new collected concrete rather than consuming a finite prefilled stock.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Supply preloaded operating materials in shulker boxes at one input location. The machine must automatically unpack and distribute them; no preloading separate processing nodes. Empty box stock is permitted without an upstream shell farm.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "machine_modes",
+          "material_net_growth",
+          "shared_processing",
+          "single_input"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "At most one evaluator player may provide only the declared necessary interaction."
+      },
+      "curriculum": {
+        "stage": 4,
+        "order": 62,
+        "prerequisites": [
+          "hard.granular_materials.v1"
+        ],
+        "focus": "Satisfy the published production and operating requirements."
+      },
+      "mode_requirements": {
+        "colors": [
+          "white",
+          "orange",
+          "magenta",
+          "light_blue",
+          "yellow",
+          "lime",
+          "pink",
+          "gray",
+          "light_gray",
+          "cyan",
+          "purple",
+          "blue",
+          "brown",
+          "green",
+          "red",
+          "black"
+        ],
+        "repeat_previous_mode": true,
+        "rebuild_between_modes": false,
+        "max_simultaneous_players": 1,
+        "measurement_per_mode": true
+      },
+      "shulker_io": {
+        "output": true,
+        "input": true
+      },
+      "material_growth": [
+        "minecraft:sand",
+        "minecraft:red_sand",
+        "minecraft:gravel",
+        "minecraft:white_concrete",
+        "minecraft:white_concrete_powder",
+        "minecraft:orange_concrete",
+        "minecraft:orange_concrete_powder",
+        "minecraft:magenta_concrete",
+        "minecraft:magenta_concrete_powder",
+        "minecraft:light_blue_concrete",
+        "minecraft:light_blue_concrete_powder",
+        "minecraft:yellow_concrete",
+        "minecraft:yellow_concrete_powder",
+        "minecraft:lime_concrete",
+        "minecraft:lime_concrete_powder",
+        "minecraft:pink_concrete",
+        "minecraft:pink_concrete_powder",
+        "minecraft:gray_concrete",
+        "minecraft:gray_concrete_powder",
+        "minecraft:light_gray_concrete",
+        "minecraft:light_gray_concrete_powder",
+        "minecraft:cyan_concrete",
+        "minecraft:cyan_concrete_powder",
+        "minecraft:purple_concrete",
+        "minecraft:purple_concrete_powder",
+        "minecraft:blue_concrete",
+        "minecraft:blue_concrete_powder",
+        "minecraft:brown_concrete",
+        "minecraft:brown_concrete_powder",
+        "minecraft:green_concrete",
+        "minecraft:green_concrete_powder",
+        "minecraft:red_concrete",
+        "minecraft:red_concrete_powder",
+        "minecraft:black_concrete",
+        "minecraft:black_concrete_powder"
+      ],
+      "mode_trials": [
+        {
+          "id": "minecraft:white_concrete",
+          "products": [
+            "minecraft:white_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:orange_concrete",
+          "products": [
+            "minecraft:orange_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:magenta_concrete",
+          "products": [
+            "minecraft:magenta_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:light_blue_concrete",
+          "products": [
+            "minecraft:light_blue_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:yellow_concrete",
+          "products": [
+            "minecraft:yellow_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:lime_concrete",
+          "products": [
+            "minecraft:lime_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:pink_concrete",
+          "products": [
+            "minecraft:pink_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:gray_concrete",
+          "products": [
+            "minecraft:gray_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:light_gray_concrete",
+          "products": [
+            "minecraft:light_gray_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:cyan_concrete",
+          "products": [
+            "minecraft:cyan_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:purple_concrete",
+          "products": [
+            "minecraft:purple_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:blue_concrete",
+          "products": [
+            "minecraft:blue_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:brown_concrete",
+          "products": [
+            "minecraft:brown_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:green_concrete",
+          "products": [
+            "minecraft:green_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:red_concrete",
+          "products": [
+            "minecraft:red_concrete"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "minecraft:black_concrete",
+          "products": [
+            "minecraft:black_concrete"
+          ],
+          "kind": "continuous"
+        }
+      ],
+      "mandatory_review_checks": [
+        "shared_processing"
+      ],
+      "material_driver_items": [
+        "minecraft:white_concrete_powder",
+        "minecraft:orange_concrete_powder",
+        "minecraft:magenta_concrete_powder",
+        "minecraft:light_blue_concrete_powder",
+        "minecraft:yellow_concrete_powder",
+        "minecraft:lime_concrete_powder",
+        "minecraft:pink_concrete_powder",
+        "minecraft:gray_concrete_powder",
+        "minecraft:light_gray_concrete_powder",
+        "minecraft:cyan_concrete_powder",
+        "minecraft:purple_concrete_powder",
+        "minecraft:blue_concrete_powder",
+        "minecraft:brown_concrete_powder",
+        "minecraft:green_concrete_powder",
+        "minecraft:red_concrete_powder",
+        "minecraft:black_concrete_powder"
+      ],
+      "single_input_items": [
+        "minecraft:white_concrete_powder",
+        "minecraft:orange_concrete_powder",
+        "minecraft:magenta_concrete_powder",
+        "minecraft:light_blue_concrete_powder",
+        "minecraft:yellow_concrete_powder",
+        "minecraft:lime_concrete_powder",
+        "minecraft:pink_concrete_powder",
+        "minecraft:gray_concrete_powder",
+        "minecraft:light_gray_concrete_powder",
+        "minecraft:cyan_concrete_powder",
+        "minecraft:purple_concrete_powder",
+        "minecraft:blue_concrete_powder",
+        "minecraft:brown_concrete_powder",
+        "minecraft:green_concrete_powder",
+        "minecraft:red_concrete_powder",
+        "minecraft:black_concrete_powder"
+      ]
+    },
+    {
+      "id": "expert.cobblestone.v1",
+      "title": "Two-Million-Per-Hour Cobblestone Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:cobblestone"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:cobblestone"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 36000,
+        "min_net_items": 1000000,
+        "min_per_game_hour": 2000000,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "expert",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Meet the shared hard initial-inventory constraints and run without manual replenishment.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Empty shulker boxes may be supplied initially; upstream shell production is not required.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "The complete machine, including collection, shulker packing and output storage, must fit within 64 blocks on each axis in one dimension, except that at most one freely chosen axis may extend up to 100 blocks.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "machine_bounds"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 4,
+        "order": 63,
+        "prerequisites": [
+          "hard.cobblestone_reassessment.v1"
+        ],
+        "focus": "Meet higher sustained production and automated storage requirements under the shared hard input rules."
+      },
+      "shulker_io": {
+        "output": true,
+        "input": false
+      },
+      "block_output_balance": true,
+      "machine_limits": {
+        "max_size": [
+          64,
+          64,
+          64
+        ],
+        "one_axis_max_size": 100
+      }
+    },
+    {
+      "id": "expert.ice.v1",
+      "title": "High-Throughput Ice Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:ice"
+      ],
+      "product_profiles": [
+        {
+          "id": "ice",
+          "products": [
+            "minecraft:ice"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 36000,
+        "min_net_items": 25000,
+        "min_per_game_hour": 50000,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:diamond_pickaxe",
+        "minecraft:netherite_pickaxe"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "expert",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "One stationary player may perform the declared harvesting action using survival-obtainable equipment.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack"
+        ],
+        "rationale": "Evaluation permits one player performing only the declared attack interaction."
+      },
+      "curriculum": {
+        "stage": 4,
+        "order": 64,
+        "prerequisites": [
+          "medium.ice.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "block_output_balance": true,
+      "shulker_io": {
+        "output": true,
+        "input": false
+      }
+    },
+    {
+      "id": "expert.universal_tree_farm.v1",
+      "title": "Shared Six-Species Tree Farm",
+      "description": "Build one integrated tree farm supporting single-sapling oak, birch, spruce, jungle, acacia and cherry modes. Demonstrate every mode using the same processing and collection machinery. At most two planting positions are permitted; independent species-specific farms are not accepted.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:oak_log",
+        "minecraft:birch_log",
+        "minecraft:spruce_log",
+        "minecraft:jungle_log",
+        "minecraft:acacia_log",
+        "minecraft:cherry_log"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:oak_log",
+            "minecraft:birch_log",
+            "minecraft:spruce_log",
+            "minecraft:jungle_log",
+            "minecraft:acacia_log",
+            "minecraft:cherry_log"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 64,
+        "min_per_game_hour": 64.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "product_targets": {
+          "minecraft:oak_log": {
+            "min_net_items": 30200,
+            "min_per_game_hour": 30200
+          },
+          "minecraft:birch_log": {
+            "min_net_items": 36134,
+            "min_per_game_hour": 36134
+          },
+          "minecraft:spruce_log": {
+            "min_net_items": 24200,
+            "min_per_game_hour": 24200
+          },
+          "minecraft:jungle_log": {
+            "min_net_items": 29800,
+            "min_per_game_hour": 29800
+          },
+          "minecraft:acacia_log": {
+            "min_net_items": 24000,
+            "min_per_game_hour": 24000
+          },
+          "minecraft:cherry_log": {
+            "min_net_items": 29400,
+            "min_per_game_hour": 29400
+          }
+        }
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:oak_sapling",
+        "minecraft:birch_sapling",
+        "minecraft:spruce_sapling",
+        "minecraft:jungle_sapling",
+        "minecraft:acacia_sapling",
+        "minecraft:cherry_sapling"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "expert",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout measurement; initially stored products do not count as new output.",
+        "Do not manually replenish materials or modify the machine during evaluation.",
+        "At most one evaluator player may plant during any mode. All log harvesting and collection must be automatic.",
+        "Mode changes may select controls and planting material but may not reconstruct the machine.",
+        "Bone meal may be preloaded at one input. Replanting stock must grow overall; single-sapling jungle stock may remain unchanged.",
+        "Each species mode is measured separately against its published product target; simultaneous planting of all six species is not required.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Supply preloaded operating materials in shulker boxes at one input location. The machine must automatically unpack and distribute them; no preloading separate processing nodes. Empty box stock is permitted without an upstream shell farm.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "machine_modes",
+          "shared_tree_machine",
+          "seed_balance",
+          "player_action_inventory",
+          "integrated_operation",
+          "single_input"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "At most one evaluator player may provide only the declared necessary interaction."
+      },
+      "curriculum": {
+        "stage": 4,
+        "order": 65,
+        "prerequisites": [
+          "medium.overworld_logs.v1"
+        ],
+        "focus": "Satisfy the published production and operating requirements."
+      },
+      "mode_requirements": {
+        "species": [
+          "oak",
+          "birch",
+          "spruce",
+          "jungle",
+          "acacia",
+          "cherry"
+        ],
+        "max_planting_positions": 2,
+        "shared_processing": true,
+        "shared_collection": true,
+        "rebuild_between_modes": false,
+        "max_simultaneous_players": 1,
+        "measurement_per_mode": true
+      },
+      "replanting_items": [
+        "minecraft:oak_sapling",
+        "minecraft:birch_sapling",
+        "minecraft:spruce_sapling",
+        "minecraft:jungle_sapling",
+        "minecraft:acacia_sapling",
+        "minecraft:cherry_sapling"
+      ],
+      "replanting_growth": {
+        "minimum_net_increase": 1,
+        "single_jungle_minimum": 0
+      },
+      "shulker_io": {
+        "output": true,
+        "input": true
+      },
+      "mode_trials": [
+        {
+          "id": "oak",
+          "products": [
+            "minecraft:oak_log"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "birch",
+          "products": [
+            "minecraft:birch_log"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "spruce",
+          "products": [
+            "minecraft:spruce_log"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "jungle",
+          "products": [
+            "minecraft:jungle_log"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "acacia",
+          "products": [
+            "minecraft:acacia_log"
+          ],
+          "kind": "continuous"
+        },
+        {
+          "id": "cherry",
+          "products": [
+            "minecraft:cherry_log"
+          ],
+          "kind": "continuous"
+        }
+      ],
+      "mandatory_review_checks": [
+        "shared_tree_machine"
+      ],
+      "material_driver_items": [
+        "minecraft:oak_sapling",
+        "minecraft:birch_sapling",
+        "minecraft:spruce_sapling",
+        "minecraft:jungle_sapling",
+        "minecraft:acacia_sapling",
+        "minecraft:cherry_sapling"
+      ],
+      "single_input_items": [
+        "minecraft:bone_meal",
+        "minecraft:oak_sapling",
+        "minecraft:birch_sapling",
+        "minecraft:spruce_sapling",
+        "minecraft:jungle_sapling",
+        "minecraft:acacia_sapling",
+        "minecraft:cherry_sapling"
+      ],
+      "block_output_balance": true
+    }
+  ]
+}

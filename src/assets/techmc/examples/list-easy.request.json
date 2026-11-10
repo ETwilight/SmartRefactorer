@@ -1,0 +1,6 @@
+{
+  "protocol_version": "1.0",
+  "request_id": "list-easy-1",
+  "op": "tasks.list",
+  "params": {"difficulty": "easy"}
+}

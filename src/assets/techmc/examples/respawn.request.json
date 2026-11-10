@@ -1,0 +1,12 @@
+{
+  "protocol_version": "1.0",
+  "request_id": "respawn-example-1",
+  "op": "action.execute",
+  "params": {
+    "action": {
+      "method": "action.respawn",
+      "side": "client",
+      "params": {"timeout_ms": 15000}
+    }
+  }
+}

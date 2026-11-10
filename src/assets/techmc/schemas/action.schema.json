@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "method": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "side": {
+      "enum": [
+        "client",
+        "server",
+        "local"
+      ]
+    },
+    "params": {
+      "type": "object"
+    },
+    "executor": {
+      "enum": [
+        "direct",
+        "cli",
+        "execution_agent"
+      ]
+    },
+    "wait": {
+      "type": "boolean"
+    },
+    "phase": {
+      "enum": [
+        "setup",
+        "build",
+        "warmup",
+        "measure",
+        "diagnose"
+      ]
+    }
+  },
+  "required": [
+    "method",
+    "side",
+    "params"
+  ],
+  "additionalProperties": false
+}

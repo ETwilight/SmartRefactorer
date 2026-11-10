@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "techmc_env",
+  "version": "0.1.0",
+  "name": "TechMC Environment Bridge",
+  "environment": "*",
+  "mixins": ["techmc_env.mixins.json"],
+  "entrypoints": {
+    "main": ["research.agent.ServerBridge"],
+    "client": ["research.agent.ClientBridge"]
+  },
+  "depends": {"minecraft": "=26.1", "java": ">=25", "fabricloader": ">=0.18.4", "fabric-api": "*"}
+}

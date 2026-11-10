@@ -1,0 +1,59 @@
+% Compile twice with: pdflatex "research proposal.tex"
+% Personal information: edit the three commands below, then recompile.
+% Keep the unmodified official neurips_2026.sty in this directory.
+\documentclass{article}
+\usepackage[preprint,nonatbib]{neurips_2026}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\AuthorName}{Brian Guo}
+\newcommand{\AuthorEmail}{brianguo18@ucla.edu}
+\newcommand{\AuthorUID}{206999198}
+
+\title{SmartRefactorer: An Agentic Refactorer\\That Plans Efficiently for the Future}
+\author{%
+  \AuthorName\\
+  University of California, Los Angeles\\
+  \texttt{\AuthorEmail}\\
+  UID: \AuthorUID
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Agents accumulate reusable skills while completing uncertain and sequential user tasks, however, evolving user demands can cause the skill library to be difficult to maintain. Refactoring reorganizes these components while retaining useful logic~\cite{skillsmith}.
+However, decisions based only on current requests may lead to repeated revisions during migration or further architectural changes as new demands emerge, increasing cost and delaying task completion.
+
+We propose SmartRefactorer, a frozen-LLM agent that forecasts plausible future demands to guide refactoring. It analyzes the repository and task history, forecasts the future user demands, selectively asks users when uncertainty is too large~\cite{voi}, and compares local development with alternative migration proposals~\cite{dsa}.
+
+Our goal is to reduce frequent refactoring while maintain the quality of each refactoring, maintain a healthy skill-repository structure, and improve long-term efficiency under limited budgets and costs.
+
+Evaluation will measure forecast reliability, its contribution to migration decisions, task success, capability preservation, cumulative tokens, and wall-clock time on verifiable task streams.
+\end{abstract}
+
+\paragraph{Work division.}
+This is an individual project.
+
+{\small
+\begin{thebibliography}{3}
+\bibitem{dsa}
+Jianyu Xu, Bryan Wilder, and Aarti Singh.
+\href{https://ssrn.com/abstract=7545498}{\emph{When Should Agents Build Reusable Tools?}}
+2026.
+
+\bibitem{skillsmith}
+Yangbo Wei et al.
+\href{https://arxiv.org/abs/2606.01314v2}{\emph{SkillSmith: Co-Evolving Skills and Tools for Self-Improving Agent Systems}}.
+2026.
+
+\bibitem{voi}
+Yijiang River Dong et al.
+\href{https://aclanthology.org/2026.acl-long.1987/}{\emph{Value of Information: A Framework for Human--Agent Communication}}.
+ACL, 2026.
+\end{thebibliography}
+}
+
+\end{document}

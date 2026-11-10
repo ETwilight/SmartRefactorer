@@ -1,0 +1,938 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "const": "1.0"
+    },
+    "language": {
+      "const": "en"
+    },
+    "difficulty": {
+      "enum": [
+        "easy",
+        "medium",
+        "hard",
+        "expert"
+      ]
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "title": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "threshold",
+              "open_efficiency"
+            ]
+          },
+          "primary_products": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "required_roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "mechanism_groups": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^minecraft:[a-z0-9_/]+$"
+              },
+              "minItems": 1
+            }
+          },
+          "measurement": {
+            "type": "object",
+            "properties": {
+              "warmup_ticks": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "window_ticks": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "min_net_items": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "min_per_game_hour": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "random_tick_speed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "mode": {
+                "enum": [
+                  "natural",
+                  "sprint"
+                ]
+              },
+              "allowed_modes": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "natural",
+                    "sprint"
+                  ]
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "product_targets": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "min_net_items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "min_per_game_hour": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "min_net_items",
+                    "min_per_game_hour"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "aggregate_targets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                    },
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^minecraft:[a-z0-9_/]+$"
+                      },
+                      "minItems": 1,
+                      "uniqueItems": true
+                    },
+                    "target": {
+                      "type": "object",
+                      "properties": {
+                        "min_net_items": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "min_per_game_hour": {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": [
+                        "min_net_items",
+                        "min_per_game_hour"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "products",
+                    "target"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "segments": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 12
+              }
+            },
+            "required": [
+              "warmup_ticks",
+              "window_ticks",
+              "min_net_items",
+              "min_per_game_hour",
+              "random_tick_speed",
+              "mode",
+              "allowed_modes"
+            ],
+            "additionalProperties": false
+          },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "reserved_stack_slots_per_primary": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "headroom_ticks": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "min_free_stack_slots": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "destination": {
+                "enum": [
+                  "containers",
+                  "evaluator_inventory"
+                ]
+              }
+            },
+            "required": [
+              "reserved_stack_slots_per_primary",
+              "headroom_ticks",
+              "min_free_stack_slots"
+            ],
+            "additionalProperties": false
+          },
+          "allowed_driver_tools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "forbidden_blocks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "uniqueItems": true
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          },
+          "suite": {
+            "enum": [
+              "production_curriculum"
+            ]
+          },
+          "difficulty": {
+            "enum": [
+              "easy",
+              "medium",
+              "hard",
+              "expert"
+            ]
+          },
+          "world_type": {
+            "enum": [
+              "void",
+              "natural"
+            ]
+          },
+          "natural_source": {
+            "enum": [
+              "monument",
+              "trial_chambers",
+              "bedrock",
+              "amethyst_geode"
+            ]
+          },
+          "shulker_io": {
+            "type": "object",
+            "properties": {
+              "output": {
+                "const": true
+              },
+              "input": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "output",
+              "input"
+            ],
+            "additionalProperties": false
+          },
+          "mode_requirements": {
+            "type": "object"
+          },
+          "mode_trials": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                },
+                "products": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^minecraft:[a-z0-9_/]+$"
+                  },
+                  "minItems": 1,
+                  "maxItems": 16
+                },
+                "kind": {
+                  "enum": [
+                    "continuous",
+                    "batch"
+                  ]
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "potion": {
+                  "type": "string",
+                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                }
+              },
+              "required": [
+                "id",
+                "products",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "mandatory_review_checks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            "uniqueItems": true
+          },
+          "order_window_ticks": {
+            "type": "integer",
+            "minimum": 200
+          },
+          "order_settle_ticks": {
+            "type": "integer",
+            "minimum": 20
+          },
+          "material_driver_items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "uniqueItems": true
+          },
+          "allowed_offhand_items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "uniqueItems": true
+          },
+          "brew_orders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                },
+                "item": {
+                  "type": "string",
+                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                },
+                "potion": {
+                  "type": "string",
+                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "id",
+                "item",
+                "potion",
+                "count"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "variant_targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                },
+                "item": {
+                  "type": "string",
+                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                },
+                "components": {
+                  "type": "object"
+                },
+                "target": {
+                  "type": "object",
+                  "properties": {
+                    "min_net_items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "min_per_game_hour": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": [
+                    "min_net_items",
+                    "min_per_game_hour"
+                  ],
+                  "additionalProperties": false
+                },
+                "separate_storage": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "item",
+                "components",
+                "target",
+                "separate_storage"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "production_kind": {
+            "enum": [
+              "renewable",
+              "processing",
+              "integrated"
+            ]
+          },
+          "operating_requirements": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          },
+          "product_profiles": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                },
+                "products": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^minecraft:[a-z0-9_/]+$"
+                  },
+                  "minItems": 1,
+                  "maxItems": 16,
+                  "uniqueItems": true
+                },
+                "processing_inputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^minecraft:[a-z0-9_/]+$"
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "earth_inputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^minecraft:[a-z0-9_/]+$"
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "required_recipe_observers": {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "cooking",
+                      "crafting",
+                      "brewing"
+                    ]
+                  },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "required_checks": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                  },
+                  "uniqueItems": true
+                },
+                "inventory_batch": {
+                  "type": "object",
+                  "properties": {
+                    "input_item": {
+                      "type": "string",
+                      "pattern": "^minecraft:[a-z0-9_/]+$"
+                    },
+                    "count": {
+                      "const": 36
+                    }
+                  },
+                  "required": [
+                    "input_item",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "products"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "processing_inputs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "earth_inputs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "required_recipe_observers": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "cooking",
+                "crafting",
+                "brewing"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "material_conversion": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "string",
+                "pattern": "^minecraft:[a-z0-9_/]+$"
+              },
+              "output": {
+                "type": "string",
+                "pattern": "^minecraft:[a-z0-9_/]+$"
+              },
+              "input_units": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "output_units": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "input",
+              "output",
+              "input_units",
+              "output_units"
+            ],
+            "additionalProperties": false
+          },
+          "material_growth": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "block_output_balance": {
+            "type": "boolean"
+          },
+          "machine_limits": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "max_size": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "one_axis_max_size": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "max_size"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "max_subchunks_per_axis": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "furnaces": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "min_items_per_furnace_per_game_hour": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "max_subchunks_per_axis",
+                  "furnaces",
+                  "min_items_per_furnace_per_game_hour"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "resource_balance_include_blocks": {
+            "type": "boolean"
+          },
+          "resource_balance_min_increase": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "single_input_items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "order_batch": {
+            "type": "object",
+            "properties": {
+              "units": {
+                "const": 64
+              },
+              "selection": {
+                "const": "per_order"
+              },
+              "input_locations": {
+                "const": 1
+              }
+            },
+            "required": [
+              "units",
+              "selection",
+              "input_locations"
+            ],
+            "additionalProperties": false
+          },
+          "selected_profile": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+          },
+          "inventory_batch": {
+            "type": "object",
+            "properties": {
+              "input_item": {
+                "type": "string",
+                "pattern": "^minecraft:[a-z0-9_/]+$"
+              },
+              "count": {
+                "const": 36
+              }
+            },
+            "required": [
+              "input_item",
+              "count"
+            ],
+            "additionalProperties": false
+          },
+          "replanting_items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "resource_balance_items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "replanting_growth": {
+            "type": "object",
+            "properties": {
+              "minimum_net_increase": {
+                "const": 1
+              },
+              "single_jungle_minimum": {
+                "const": 0
+              }
+            },
+            "required": [
+              "minimum_net_increase",
+              "single_jungle_minimum"
+            ],
+            "additionalProperties": false
+          },
+          "forbidden_initial_entities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^minecraft:[a-z0-9_/]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "spawner_conversion": {
+            "type": "object",
+            "properties": {
+              "entity": {
+                "enum": [
+                  "minecraft:zombie",
+                  "minecraft:skeleton",
+                  "minecraft:spider",
+                  "minecraft:cave_spider",
+                  "minecraft:breeze",
+                  "minecraft:blaze",
+                  "minecraft:magma_cube"
+                ]
+              }
+            },
+            "required": [
+              "entity"
+            ],
+            "additionalProperties": false
+          },
+          "required_dimension": {
+            "type": "string",
+            "enum": [
+              "minecraft:overworld",
+              "minecraft:the_nether",
+              "minecraft:the_end"
+            ]
+          },
+          "acceptance": {
+            "type": "object",
+            "properties": {
+              "required_checks": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                },
+                "uniqueItems": true
+              },
+              "support": {
+                "enum": [
+                  "supported",
+                  "requires_extension"
+                ]
+              }
+            },
+            "required": [
+              "required_checks",
+              "support"
+            ],
+            "additionalProperties": false
+          },
+          "calibration_status": {
+            "enum": [
+              "uncalibrated"
+            ]
+          },
+          "curriculum": {
+            "type": "object",
+            "properties": {
+              "stage": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "prerequisites": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                },
+                "uniqueItems": true
+              },
+              "focus": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "stage",
+              "order",
+              "prerequisites",
+              "focus"
+            ],
+            "additionalProperties": false
+          },
+          "actor_policy": {
+            "type": "object",
+            "properties": {
+              "presence": {
+                "enum": [
+                  "none",
+                  "random_ticks",
+                  "observer",
+                  "player_action"
+                ]
+              },
+              "allowed_drivers": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "none",
+                    "attack",
+                    "use",
+                    "attack_and_use"
+                  ]
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "presence",
+              "allowed_drivers",
+              "rationale"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "mode",
+          "primary_products",
+          "required_roles",
+          "mechanism_groups",
+          "measurement",
+          "storage",
+          "allowed_driver_tools",
+          "description",
+          "sources",
+          "suite",
+          "difficulty",
+          "production_kind",
+          "operating_requirements",
+          "product_profiles",
+          "acceptance",
+          "calibration_status",
+          "actor_policy",
+          "curriculum"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 256
+    }
+  },
+  "required": [
+    "protocol_version",
+    "language",
+    "difficulty",
+    "tasks"
+  ],
+  "additionalProperties": false
+}

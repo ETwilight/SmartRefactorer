@@ -1,0 +1,12 @@
+{
+  "protocol_version": "1.0",
+  "request_id": "clock-request-1",
+  "op": "action.execute",
+  "params": {
+    "action": {
+      "method": "clock.query",
+      "side": "server",
+      "params": {}
+    }
+  }
+}

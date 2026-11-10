@@ -1,0 +1,26 @@
+{
+  "protocol_version": "1.0",
+  "language": "en",
+  "lists": [
+    {
+      "difficulty": "easy",
+      "file": "easy.json",
+      "task_count": 18
+    },
+    {
+      "difficulty": "medium",
+      "file": "medium.json",
+      "task_count": 17
+    },
+    {
+      "difficulty": "hard",
+      "file": "hard.json",
+      "task_count": 23
+    },
+    {
+      "difficulty": "expert",
+      "file": "expert.json",
+      "task_count": 7
+    }
+  ]
+}

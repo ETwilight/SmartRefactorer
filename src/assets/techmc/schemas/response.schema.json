@@ -1,0 +1,420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "const": "1.0"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "running",
+        "error",
+        "pending_or_unknown"
+      ]
+    },
+    "result": {},
+    "error": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "actor_state": {
+      "type": "object"
+    },
+    "feedback_ref": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "response_view": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "enum": [
+            "full",
+            "summary",
+            "reference"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "basic",
+              "equipment",
+              "cooking",
+              "sources",
+              "activity"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "not": {
+        "required": [
+          "fields",
+          "sections"
+        ]
+      }
+    },
+    "infrastructure": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "request_uncertain",
+            "server_or_transport_unavailable",
+            "server_unavailable",
+            "recovered",
+            "recovery_failed",
+            "recovery_error",
+            "not_confirmed_stopped",
+            "already_available",
+            "unmanaged",
+            "ownership_mismatch",
+            "measurement_interrupted",
+            "persistence_failed",
+            "review_unavailable"
+          ]
+        },
+        "recovered": {
+          "type": "boolean"
+        },
+        "reset_available": {
+          "type": "boolean"
+        },
+        "same_world": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "measurement_valid": {
+          "type": "boolean"
+        },
+        "incident_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "stage": {
+          "enum": [
+            "request",
+            "measurement",
+            "recovery",
+            "persistence",
+            "cleanup",
+            "review"
+          ]
+        },
+        "fault": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "recovery_error": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "state_error": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "persistence_error": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "message"
+          ],
+          "additionalProperties": false
+        },
+        "process_state": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "action_outcome": {
+          "type": "string"
+        },
+        "uncertain_action": {
+          "type": "string"
+        },
+        "clock_and_actors": {
+          "type": "string"
+        },
+        "task_instances": {
+          "type": "string"
+        },
+        "old_instance_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instance_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "old_world": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "world": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "passed_tasks": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "enum": [
+                  "active",
+                  "deferred",
+                  "abandoned",
+                  "passed"
+                ]
+              },
+              "task_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "evaluation_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reset_op": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "const": "server.recover"
+                },
+                "params": {
+                  "type": "object",
+                  "properties": {
+                    "reset_world": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "reset_world"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "op",
+                "params"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "not_started",
+            "completed",
+            "running",
+            "unknown"
+          ]
+        },
+        "retry": {
+          "enum": [
+            "none",
+            "same_request_only",
+            "observe_before_new_request",
+            "read_only_new_request",
+            "new_evaluation"
+          ]
+        },
+        "next_steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "state",
+        "retry",
+        "next_steps"
+      ],
+      "additionalProperties": false
+    },
+    "source_request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "source_execution": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "enum": [
+            "not_started",
+            "completed",
+            "running",
+            "unknown"
+          ]
+        },
+        "retry": {
+          "enum": [
+            "none",
+            "same_request_only",
+            "observe_before_new_request",
+            "read_only_new_request",
+            "new_evaluation"
+          ]
+        },
+        "next_steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "state",
+        "retry",
+        "next_steps"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "protocol_version",
+    "request_id",
+    "session_id",
+    "status",
+    "result",
+    "error"
+  ],
+  "additionalProperties": false
+}

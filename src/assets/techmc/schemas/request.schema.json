@@ -1,0 +1,2416 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocol_version": {
+      "const": "1.0"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "op": {
+      "enum": [
+        "environment.describe",
+        "actions.list",
+        "tasks.list",
+        "tasks.get",
+        "task.start",
+        "action.execute",
+        "submission.validate",
+        "evaluation.run",
+        "evaluation.get",
+        "session.close",
+        "actions.get",
+        "schemas.get",
+        "environment.document",
+        "environment.status",
+        "registry.get",
+        "feedback.get",
+        "feedback.list",
+        "task.progress",
+        "server.recover"
+      ]
+    },
+    "params": {
+      "type": "object"
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "enum": [
+            "full",
+            "summary",
+            "reference"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "maxItems": 64
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "basic",
+              "equipment",
+              "cooking",
+              "sources",
+              "activity"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "not": {
+        "required": [
+          "fields",
+          "sections"
+        ]
+      }
+    }
+  },
+  "required": [
+    "protocol_version",
+    "request_id",
+    "op",
+    "params"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "environment.describe"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "detail": {
+                "enum": [
+                  "full",
+                  "summary",
+                  "manifest"
+                ]
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "actions.list"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "detail": {
+                "enum": [
+                  "full",
+                  "index"
+                ]
+              },
+              "category": {
+                "type": "string"
+              },
+              "prefix": {
+                "type": "string"
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "tasks.list"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "difficulty": {
+                "enum": [
+                  "easy",
+                  "medium",
+                  "hard",
+                  "expert"
+                ]
+              },
+              "world_type": {
+                "enum": [
+                  "void",
+                  "natural"
+                ]
+              },
+              "detail": {
+                "enum": [
+                  "full",
+                  "index"
+                ]
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "tasks.get"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              }
+            },
+            "required": [
+              "task_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "task.start"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              },
+              "profile_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              }
+            },
+            "required": [
+              "task_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "action.execute"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "object",
+                "properties": {
+                  "method": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                  },
+                  "side": {
+                    "enum": [
+                      "client",
+                      "server",
+                      "local"
+                    ]
+                  },
+                  "params": {
+                    "type": "object"
+                  },
+                  "executor": {
+                    "enum": [
+                      "direct",
+                      "cli",
+                      "execution_agent"
+                    ]
+                  },
+                  "wait": {
+                    "type": "boolean"
+                  },
+                  "phase": {
+                    "enum": [
+                      "setup",
+                      "build",
+                      "warmup",
+                      "measure",
+                      "diagnose"
+                    ]
+                  }
+                },
+                "required": [
+                  "method",
+                  "side",
+                  "params"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "submission.validate"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "submission": {
+                "type": "object",
+                "properties": {
+                  "task_instance_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                  },
+                  "dimension": {
+                    "type": "string",
+                    "enum": [
+                      "minecraft:overworld",
+                      "minecraft:the_nether",
+                      "minecraft:the_end"
+                    ]
+                  },
+                  "bounds": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "max": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "regions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        },
+                        "bounds": {
+                          "type": "object",
+                          "properties": {
+                            "min": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "max": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "bounds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "mechanism": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 12000
+                  },
+                  "inspection_points": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                        },
+                        "position": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "position",
+                        "purpose"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "outputs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "product": {
+                          "type": "string",
+                          "pattern": "^minecraft:[a-z0-9_/]+$"
+                        },
+                        "containers": {
+                          "type": "array",
+                          "minItems": 0,
+                          "maxItems": 128,
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "position": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "integer",
+                                      "minimum": -2147483648,
+                                      "maximum": 2147483647
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  "dimension": {
+                                    "type": "string",
+                                    "enum": [
+                                      "minecraft:overworld",
+                                      "minecraft:the_nether",
+                                      "minecraft:the_end"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "position"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "entity_uuid": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "dimension": {
+                                    "type": "string",
+                                    "enum": [
+                                      "minecraft:overworld",
+                                      "minecraft:the_nether",
+                                      "minecraft:the_end"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "entity_uuid"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "collection_path": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 64,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          }
+                        }
+                      },
+                      "required": [
+                        "product",
+                        "containers",
+                        "collection_path"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "inputs": {
+                    "type": "array",
+                    "maxItems": 128,
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "position": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "dimension": {
+                              "type": "string",
+                              "enum": [
+                                "minecraft:overworld",
+                                "minecraft:the_nether",
+                                "minecraft:the_end"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "position"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "entity_uuid": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "dimension": {
+                              "type": "string",
+                              "enum": [
+                                "minecraft:overworld",
+                                "minecraft:the_nether",
+                                "minecraft:the_end"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "entity_uuid"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "variant_outputs": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                    },
+                    "additionalProperties": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "position": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": -2147483648,
+                                  "maximum": 2147483647
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              "dimension": {
+                                "type": "string",
+                                "enum": [
+                                  "minecraft:overworld",
+                                  "minecraft:the_nether",
+                                  "minecraft:the_end"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "position"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "entity_uuid": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "dimension": {
+                                "type": "string",
+                                "enum": [
+                                  "minecraft:overworld",
+                                  "minecraft:the_nether",
+                                  "minecraft:the_end"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "entity_uuid"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "operation": {
+                    "type": "object",
+                    "properties": {
+                      "afk_position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "driver": {
+                        "enum": [
+                          "none",
+                          "attack",
+                          "use",
+                          "attack_and_use"
+                        ]
+                      },
+                      "target": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "aim_point": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "tool": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^minecraft:[a-z0-9_/]+$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "planting_footprint": {
+                        "enum": [
+                          "single",
+                          "2x2"
+                        ]
+                      },
+                      "tool_components": {
+                        "type": "object"
+                      },
+                      "offhand_item": {
+                        "type": "string",
+                        "pattern": "^minecraft:[a-z0-9_/]+$"
+                      },
+                      "startup_steps": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "consumables": {
+                        "type": "array",
+                        "maxItems": 32,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "item": {
+                              "type": "string",
+                              "pattern": "^minecraft:[a-z0-9_/]+$"
+                            },
+                            "source": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "position": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "integer",
+                                        "minimum": -2147483648,
+                                        "maximum": 2147483647
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "dimension": {
+                                      "type": "string",
+                                      "enum": [
+                                        "minecraft:overworld",
+                                        "minecraft:the_nether",
+                                        "minecraft:the_end"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "position"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "entity_uuid": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "dimension": {
+                                      "type": "string",
+                                      "enum": [
+                                        "minecraft:overworld",
+                                        "minecraft:the_nether",
+                                        "minecraft:the_end"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "entity_uuid"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "item",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "afk_position",
+                      "driver",
+                      "target",
+                      "aim_point",
+                      "tool",
+                      "startup_steps",
+                      "consumables"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "claims": {
+                    "type": "string",
+                    "maxLength": 8000
+                  },
+                  "machine_modes": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                    },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "controls": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "position": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": -2147483648,
+                                  "maximum": 2147483647
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              "dimension": {
+                                "type": "string",
+                                "enum": [
+                                  "minecraft:overworld",
+                                  "minecraft:the_nether",
+                                  "minecraft:the_end"
+                                ]
+                              },
+                              "action": {
+                                "enum": [
+                                  "set_lever",
+                                  "press_button"
+                                ]
+                              },
+                              "powered": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "position",
+                              "action"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 64
+                        },
+                        "operation": {
+                          "type": "object",
+                          "properties": {
+                            "afk_position": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "driver": {
+                              "enum": [
+                                "none",
+                                "attack",
+                                "use",
+                                "attack_and_use"
+                              ]
+                            },
+                            "target": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "integer",
+                                    "minimum": -2147483648,
+                                    "maximum": 2147483647
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "aim_point": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "tool": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "planting_footprint": {
+                              "enum": [
+                                "single",
+                                "2x2"
+                              ]
+                            },
+                            "tool_components": {
+                              "type": "object"
+                            },
+                            "offhand_item": {
+                              "type": "string",
+                              "pattern": "^minecraft:[a-z0-9_/]+$"
+                            },
+                            "startup_steps": {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            "consumables": {
+                              "type": "array",
+                              "maxItems": 32,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "item": {
+                                    "type": "string",
+                                    "pattern": "^minecraft:[a-z0-9_/]+$"
+                                  },
+                                  "source": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "position": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "integer",
+                                              "minimum": -2147483648,
+                                              "maximum": 2147483647
+                                            },
+                                            "minItems": 3,
+                                            "maxItems": 3
+                                          },
+                                          "dimension": {
+                                            "type": "string",
+                                            "enum": [
+                                              "minecraft:overworld",
+                                              "minecraft:the_nether",
+                                              "minecraft:the_end"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "position"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "entity_uuid": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                          },
+                                          "dimension": {
+                                            "type": "string",
+                                            "enum": [
+                                              "minecraft:overworld",
+                                              "minecraft:the_nether",
+                                              "minecraft:the_end"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "entity_uuid"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "afk_position",
+                            "driver",
+                            "target",
+                            "aim_point",
+                            "tool",
+                            "startup_steps",
+                            "consumables"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "controls"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "review_volumes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        },
+                        "bounds": {
+                          "type": "object",
+                          "properties": {
+                            "min": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "max": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "bounds",
+                        "purpose"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "start_controls": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "position": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        },
+                        "action": {
+                          "enum": [
+                            "set_lever",
+                            "press_button"
+                          ]
+                        },
+                        "powered": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "position",
+                        "action"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "task_instance_id",
+                  "dimension",
+                  "bounds",
+                  "mechanism",
+                  "inspection_points",
+                  "outputs",
+                  "inputs",
+                  "operation",
+                  "claims"
+                ],
+                "additionalProperties": false
+              },
+              "preflight": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "submission"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "evaluation.run"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "submission": {
+                "type": "object",
+                "properties": {
+                  "task_instance_id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                  },
+                  "dimension": {
+                    "type": "string",
+                    "enum": [
+                      "minecraft:overworld",
+                      "minecraft:the_nether",
+                      "minecraft:the_end"
+                    ]
+                  },
+                  "bounds": {
+                    "type": "object",
+                    "properties": {
+                      "min": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "max": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      }
+                    },
+                    "required": [
+                      "min",
+                      "max"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "regions": {
+                    "type": "array",
+                    "maxItems": 16,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        },
+                        "bounds": {
+                          "type": "object",
+                          "properties": {
+                            "min": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "max": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "bounds"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "mechanism": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 12000
+                  },
+                  "inspection_points": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 128,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                        },
+                        "position": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "role",
+                        "position",
+                        "purpose"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "outputs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "product": {
+                          "type": "string",
+                          "pattern": "^minecraft:[a-z0-9_/]+$"
+                        },
+                        "containers": {
+                          "type": "array",
+                          "minItems": 0,
+                          "maxItems": 128,
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "position": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "integer",
+                                      "minimum": -2147483648,
+                                      "maximum": 2147483647
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3
+                                  },
+                                  "dimension": {
+                                    "type": "string",
+                                    "enum": [
+                                      "minecraft:overworld",
+                                      "minecraft:the_nether",
+                                      "minecraft:the_end"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "position"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "entity_uuid": {
+                                    "type": "string",
+                                    "format": "uuid"
+                                  },
+                                  "dimension": {
+                                    "type": "string",
+                                    "enum": [
+                                      "minecraft:overworld",
+                                      "minecraft:the_nether",
+                                      "minecraft:the_end"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "entity_uuid"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "collection_path": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 64,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          }
+                        }
+                      },
+                      "required": [
+                        "product",
+                        "containers",
+                        "collection_path"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "inputs": {
+                    "type": "array",
+                    "maxItems": 128,
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "position": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "dimension": {
+                              "type": "string",
+                              "enum": [
+                                "minecraft:overworld",
+                                "minecraft:the_nether",
+                                "minecraft:the_end"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "position"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "entity_uuid": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "dimension": {
+                              "type": "string",
+                              "enum": [
+                                "minecraft:overworld",
+                                "minecraft:the_nether",
+                                "minecraft:the_end"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "entity_uuid"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "variant_outputs": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                    },
+                    "additionalProperties": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "position": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": -2147483648,
+                                  "maximum": 2147483647
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              "dimension": {
+                                "type": "string",
+                                "enum": [
+                                  "minecraft:overworld",
+                                  "minecraft:the_nether",
+                                  "minecraft:the_end"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "position"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "entity_uuid": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "dimension": {
+                                "type": "string",
+                                "enum": [
+                                  "minecraft:overworld",
+                                  "minecraft:the_nether",
+                                  "minecraft:the_end"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "entity_uuid"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "operation": {
+                    "type": "object",
+                    "properties": {
+                      "afk_position": {
+                        "type": "array",
+                        "items": {
+                          "type": "number"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "driver": {
+                        "enum": [
+                          "none",
+                          "attack",
+                          "use",
+                          "attack_and_use"
+                        ]
+                      },
+                      "target": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "aim_point": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "tool": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "pattern": "^minecraft:[a-z0-9_/]+$"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "planting_footprint": {
+                        "enum": [
+                          "single",
+                          "2x2"
+                        ]
+                      },
+                      "tool_components": {
+                        "type": "object"
+                      },
+                      "offhand_item": {
+                        "type": "string",
+                        "pattern": "^minecraft:[a-z0-9_/]+$"
+                      },
+                      "startup_steps": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "consumables": {
+                        "type": "array",
+                        "maxItems": 32,
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "item": {
+                              "type": "string",
+                              "pattern": "^minecraft:[a-z0-9_/]+$"
+                            },
+                            "source": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "position": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "integer",
+                                        "minimum": -2147483648,
+                                        "maximum": 2147483647
+                                      },
+                                      "minItems": 3,
+                                      "maxItems": 3
+                                    },
+                                    "dimension": {
+                                      "type": "string",
+                                      "enum": [
+                                        "minecraft:overworld",
+                                        "minecraft:the_nether",
+                                        "minecraft:the_end"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "position"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "entity_uuid": {
+                                      "type": "string",
+                                      "format": "uuid"
+                                    },
+                                    "dimension": {
+                                      "type": "string",
+                                      "enum": [
+                                        "minecraft:overworld",
+                                        "minecraft:the_nether",
+                                        "minecraft:the_end"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "entity_uuid"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "item",
+                            "source"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "afk_position",
+                      "driver",
+                      "target",
+                      "aim_point",
+                      "tool",
+                      "startup_steps",
+                      "consumables"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "claims": {
+                    "type": "string",
+                    "maxLength": 8000
+                  },
+                  "machine_modes": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+                    },
+                    "additionalProperties": {
+                      "type": "object",
+                      "properties": {
+                        "controls": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "position": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": -2147483648,
+                                  "maximum": 2147483647
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              "dimension": {
+                                "type": "string",
+                                "enum": [
+                                  "minecraft:overworld",
+                                  "minecraft:the_nether",
+                                  "minecraft:the_end"
+                                ]
+                              },
+                              "action": {
+                                "enum": [
+                                  "set_lever",
+                                  "press_button"
+                                ]
+                              },
+                              "powered": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "position",
+                              "action"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "minItems": 1,
+                          "maxItems": 64
+                        },
+                        "operation": {
+                          "type": "object",
+                          "properties": {
+                            "afk_position": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "driver": {
+                              "enum": [
+                                "none",
+                                "attack",
+                                "use",
+                                "attack_and_use"
+                              ]
+                            },
+                            "target": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "integer",
+                                    "minimum": -2147483648,
+                                    "maximum": 2147483647
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "aim_point": {
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "tool": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "pattern": "^minecraft:[a-z0-9_/]+$"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "planting_footprint": {
+                              "enum": [
+                                "single",
+                                "2x2"
+                              ]
+                            },
+                            "tool_components": {
+                              "type": "object"
+                            },
+                            "offhand_item": {
+                              "type": "string",
+                              "pattern": "^minecraft:[a-z0-9_/]+$"
+                            },
+                            "startup_steps": {
+                              "type": "string",
+                              "maxLength": 4000
+                            },
+                            "consumables": {
+                              "type": "array",
+                              "maxItems": 32,
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "item": {
+                                    "type": "string",
+                                    "pattern": "^minecraft:[a-z0-9_/]+$"
+                                  },
+                                  "source": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "position": {
+                                            "type": "array",
+                                            "items": {
+                                              "type": "integer",
+                                              "minimum": -2147483648,
+                                              "maximum": 2147483647
+                                            },
+                                            "minItems": 3,
+                                            "maxItems": 3
+                                          },
+                                          "dimension": {
+                                            "type": "string",
+                                            "enum": [
+                                              "minecraft:overworld",
+                                              "minecraft:the_nether",
+                                              "minecraft:the_end"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "position"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "entity_uuid": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                          },
+                                          "dimension": {
+                                            "type": "string",
+                                            "enum": [
+                                              "minecraft:overworld",
+                                              "minecraft:the_nether",
+                                              "minecraft:the_end"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "entity_uuid"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "item",
+                                  "source"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "afk_position",
+                            "driver",
+                            "target",
+                            "aim_point",
+                            "tool",
+                            "startup_steps",
+                            "consumables"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "controls"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "review_volumes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        },
+                        "bounds": {
+                          "type": "object",
+                          "properties": {
+                            "min": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "max": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          },
+                          "required": [
+                            "min",
+                            "max"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        }
+                      },
+                      "required": [
+                        "dimension",
+                        "bounds",
+                        "purpose"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "start_controls": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 64,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "position": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        "dimension": {
+                          "type": "string",
+                          "enum": [
+                            "minecraft:overworld",
+                            "minecraft:the_nether",
+                            "minecraft:the_end"
+                          ]
+                        },
+                        "action": {
+                          "enum": [
+                            "set_lever",
+                            "press_button"
+                          ]
+                        },
+                        "powered": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "position",
+                        "action"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "task_instance_id",
+                  "dimension",
+                  "bounds",
+                  "mechanism",
+                  "inspection_points",
+                  "outputs",
+                  "inputs",
+                  "operation",
+                  "claims"
+                ],
+                "additionalProperties": false
+              },
+              "mode": {
+                "enum": [
+                  "auto",
+                  "deterministic",
+                  "hybrid"
+                ],
+                "default": "auto"
+              },
+              "tick_mode": {
+                "enum": [
+                  "natural",
+                  "sprint"
+                ]
+              }
+            },
+            "required": [
+              "submission"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "evaluation.get"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "evaluation_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              }
+            },
+            "required": [
+              "evaluation_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "session.close"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "actions.get"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "method": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              }
+            },
+            "required": [
+              "method"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "schemas.get"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "operation": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "environment.document"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "environment.status"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "registry.get"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "enum": [
+                  "fuels"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "feedback.get"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "request_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "path": {
+                "type": "string"
+              },
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256
+              }
+            },
+            "required": [
+              "request_id"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "feedback.list"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "offset": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256
+              },
+              "op": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "task.progress"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "task_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+              },
+              "state": {
+                "enum": [
+                  "deferred",
+                  "abandoned",
+                  "active"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "task_id",
+              "state",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "server.recover"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "params": {
+            "type": "object",
+            "properties": {
+              "reset_world": {
+                "type": "boolean"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "protocol_version": "1.0",
+  "request_id": "evaluate-cobblestone-1",
+  "op": "evaluation.run",
+  "params": {
+    "submission": {
+      "task_instance_id": "REPLACE_WITH_TASK_START_INSTANCE_ID",
+      "dimension": "minecraft:overworld",
+      "bounds": {
+        "min": [
+          47,
+          68,
+          13
+        ],
+        "max": [
+          52,
+          73,
+          17
+        ]
+      },
+      "mechanism": "Example manifest only. Replace this text with an evidence-based explanation of the actual submitted production and collection system.",
+      "inspection_points": [
+        {
+          "role": "production",
+          "position": [
+            50,
+            70,
+            16
+          ],
+          "purpose": "Inspect actual production"
+        },
+        {
+          "role": "collection",
+          "position": [
+            50,
+            69,
+            16
+          ],
+          "purpose": "Hopper into storage"
+        }
+      ],
+      "outputs": [
+        {
+          "product": "minecraft:cobblestone",
+          "containers": [
+            {
+              "position": [
+                50,
+                68,
+                16
+              ]
+            }
+          ],
+          "collection_path": [
+            [
+              50,
+              69,
+              16
+            ],
+            [
+              50,
+              68,
+              16
+            ]
+          ]
+        }
+      ],
+      "inputs": [],
+      "operation": {
+        "afk_position": [
+          50.5,
+          70,
+          14.5
+        ],
+        "driver": "none",
+        "target": null,
+        "aim_point": null,
+        "tool": null,
+        "startup_steps": "The submitted system must already be ready to run.",
+        "consumables": []
+      },
+      "claims": "Example manifest; acceptance depends on actual observations and fixed task criteria."
+    },
+    "mode": "auto"
+  }
+}

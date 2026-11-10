@@ -1,0 +1,1558 @@
+{
+  "protocol_version": "1.0",
+  "language": "en",
+  "difficulty": "easy",
+  "tasks": [
+    {
+      "id": "easy.cactus.v1",
+      "title": "Continuous Cactus Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:cactus"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:cactus"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 1,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.bamboo.v1",
+      "title": "Continuous Bamboo Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:bamboo"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:bamboo"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 64,
+        "min_per_game_hour": 192.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 2,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.sugar_cane.v1",
+      "title": "Continuous Sugar Cane Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:sugar_cane"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:sugar_cane"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 3,
+        "prerequisites": [
+          "easy.bamboo.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.kelp.v1",
+      "title": "Continuous Kelp Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:kelp"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:kelp"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 4,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.sweet_berries.v1",
+      "title": "Continuous Sweet Berry Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:sweet_berries"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:sweet_berries"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 5,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.snow.v1",
+      "title": "Continuous Snowball Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:snowball"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:snowball"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 64,
+        "min_per_game_hour": 192.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:iron_shovel",
+        "minecraft:diamond_shovel",
+        "minecraft:netherite_shovel"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack"
+        ],
+        "rationale": "Evaluation permits one player performing only the declared attack interaction."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 6,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.melon.v1",
+      "title": "Continuous Melon Slice Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:melon_slice"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:melon_slice"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 7,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.wool.v1",
+      "title": "Continuous Wool Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:white_wool"
+      ],
+      "product_profiles": [
+        {
+          "id": "white_wool",
+          "products": [
+            "minecraft:white_wool"
+          ]
+        },
+        {
+          "id": "orange_wool",
+          "products": [
+            "minecraft:orange_wool"
+          ]
+        },
+        {
+          "id": "magenta_wool",
+          "products": [
+            "minecraft:magenta_wool"
+          ]
+        },
+        {
+          "id": "light_blue_wool",
+          "products": [
+            "minecraft:light_blue_wool"
+          ]
+        },
+        {
+          "id": "yellow_wool",
+          "products": [
+            "minecraft:yellow_wool"
+          ]
+        },
+        {
+          "id": "lime_wool",
+          "products": [
+            "minecraft:lime_wool"
+          ]
+        },
+        {
+          "id": "pink_wool",
+          "products": [
+            "minecraft:pink_wool"
+          ]
+        },
+        {
+          "id": "gray_wool",
+          "products": [
+            "minecraft:gray_wool"
+          ]
+        },
+        {
+          "id": "light_gray_wool",
+          "products": [
+            "minecraft:light_gray_wool"
+          ]
+        },
+        {
+          "id": "cyan_wool",
+          "products": [
+            "minecraft:cyan_wool"
+          ]
+        },
+        {
+          "id": "purple_wool",
+          "products": [
+            "minecraft:purple_wool"
+          ]
+        },
+        {
+          "id": "blue_wool",
+          "products": [
+            "minecraft:blue_wool"
+          ]
+        },
+        {
+          "id": "brown_wool",
+          "products": [
+            "minecraft:brown_wool"
+          ]
+        },
+        {
+          "id": "green_wool",
+          "products": [
+            "minecraft:green_wool"
+          ]
+        },
+        {
+          "id": "red_wool",
+          "products": [
+            "minecraft:red_wool"
+          ]
+        },
+        {
+          "id": "black_wool",
+          "products": [
+            "minecraft:black_wool"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 16,
+        "min_per_game_hour": 48.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 8,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.honeycomb.v1",
+      "title": "Continuous Honeycomb Collection",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:honeycomb"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:honeycomb"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 12,
+        "min_per_game_hour": 36.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 9,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.honey_bottles.v1",
+      "title": "Continuous Honey Bottle Collection",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:honey_bottle"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:honey_bottle"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 12,
+        "min_per_game_hour": 36.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 10,
+        "prerequisites": [
+          "easy.honeycomb.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.chicken.v1",
+      "title": "Cooked Chicken and Feather Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:cooked_chicken",
+        "minecraft:feather"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:cooked_chicken",
+            "minecraft:feather"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 12,
+        "min_per_game_hour": 36.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 11,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.mushrooms.v1",
+      "title": "Continuous Small Mushroom Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:brown_mushroom"
+      ],
+      "product_profiles": [
+        {
+          "id": "brown_mushroom",
+          "products": [
+            "minecraft:brown_mushroom"
+          ]
+        },
+        {
+          "id": "red_mushroom",
+          "products": [
+            "minecraft:red_mushroom"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 12,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.sea_pickles.v1",
+      "title": "Sea Pickle Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:sea_pickle"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:sea_pickle"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Declared feedstock is permitted. Record its consumption; do not claim renewable generation of that feedstock.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 13,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.cocoa.v1",
+      "title": "Continuous Cocoa Bean Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:cocoa_beans"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:cocoa_beans"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:cocoa_beans"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Total replanting stock, including machine storage, loose items and the operating player inventory, must not decrease between operation startup and measurement completion.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "seed_balance"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "Evaluation permits one player performing only the declared use interaction."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 14,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "replanting_items": [
+        "minecraft:cocoa_beans"
+      ]
+    },
+    {
+      "id": "easy.staple_crops.v1",
+      "title": "Staple Crop Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:wheat",
+        "minecraft:wheat_seeds"
+      ],
+      "product_profiles": [
+        {
+          "id": "wheat",
+          "products": [
+            "minecraft:wheat",
+            "minecraft:wheat_seeds"
+          ]
+        },
+        {
+          "id": "carrots",
+          "products": [
+            "minecraft:carrot"
+          ]
+        },
+        {
+          "id": "potatoes",
+          "products": [
+            "minecraft:potato"
+          ]
+        },
+        {
+          "id": "beetroot",
+          "products": [
+            "minecraft:beetroot",
+            "minecraft:beetroot_seeds"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:wheat_seeds",
+        "minecraft:carrot",
+        "minecraft:potato",
+        "minecraft:beetroot_seeds"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Total replanting stock, including machine storage, loose items and the operating player inventory, must not decrease between operation startup and measurement completion.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "seed_balance"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "Evaluation permits one player performing only the declared use interaction."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 15,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "replanting_items": [
+        "minecraft:wheat_seeds",
+        "minecraft:carrot",
+        "minecraft:potato",
+        "minecraft:beetroot_seeds"
+      ]
+    },
+    {
+      "id": "easy.mud.v1",
+      "title": "Mud Production",
+      "description": "Process dirt supplied at one input location into mud and collect newly produced mud continuously. Supply operating bottles and water automatically. At most one stationary player may place delivered dirt; all other processing and collection must be automatic.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:mud"
+      ],
+      "product_profiles": [
+        {
+          "id": "mud",
+          "products": [
+            "minecraft:mud"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 36000,
+        "min_net_items": 360,
+        "min_per_game_hour": 720.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:dirt"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Declared feedstock is permitted. Record its consumption; do not claim renewable generation of that feedstock.",
+        "Preloaded feedstock must be held in one declared input container and automatically distributed to processing nodes.",
+        "Bottles and water must be supplied automatically during operation; no manual replenishment.",
+        "Account for feedstock, products and intermediate inventories according to the running vanilla conversions.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "resource_balance",
+          "recipe_accounting",
+          "single_input",
+          "automatic_operating_supplies",
+          "player_action_inventory"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "At most one stationary player may place delivered dirt; no other player operation is permitted."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 16,
+        "prerequisites": [],
+        "focus": "Sustain one material conversion with automatic operating supplies and collection."
+      },
+      "earth_inputs": [
+        "minecraft:dirt",
+        "minecraft:glass_bottle"
+      ],
+      "single_input_items": [
+        "minecraft:dirt",
+        "minecraft:glass_bottle"
+      ],
+      "required_recipe_observers": [
+        "crafting"
+      ],
+      "material_driver_items": [
+        "minecraft:dirt"
+      ]
+    },
+    {
+      "id": "easy.moss.v1",
+      "title": "Moss and Vegetation Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:moss_block"
+      ],
+      "product_profiles": [
+        {
+          "id": "moss_block",
+          "products": [
+            "minecraft:moss_block"
+          ]
+        },
+        {
+          "id": "moss_carpet",
+          "products": [
+            "minecraft:moss_carpet"
+          ]
+        },
+        {
+          "id": "azalea",
+          "products": [
+            "minecraft:azalea"
+          ]
+        },
+        {
+          "id": "flowering_azalea",
+          "products": [
+            "minecraft:flowering_azalea"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 24000,
+        "min_net_items": 32,
+        "min_per_game_hour": 96.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Declared feedstock is permitted. Record its consumption; do not claim renewable generation of that feedstock.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 17,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "easy.iron.v1",
+      "title": "Continuous Iron Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:iron_ingot"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:iron_ingot"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 36000,
+        "min_net_items": 120,
+        "min_per_game_hour": 240.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "easy",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Produce and collect iron without player kills or fake-player operating actions.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "initial_entity_policy"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "The submitted region is kept entity-ticking; no evaluator player or player kills are used."
+      },
+      "curriculum": {
+        "stage": 1,
+        "order": 18,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "forbidden_initial_entities": [
+        "minecraft:iron_golem"
+      ]
+    }
+  ]
+}

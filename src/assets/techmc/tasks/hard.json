@@ -1,0 +1,3425 @@
+{
+  "protocol_version": "1.0",
+  "language": "en",
+  "difficulty": "hard",
+  "tasks": [
+    {
+      "id": "hard.basalt_reassessment.v1",
+      "title": "Advanced Automatic Basalt Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:basalt"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:basalt"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 9000,
+        "min_per_game_hour": 9000.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Meet the shared hard initial-inventory constraints and run without manual replenishment.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Empty shulker boxes may be supplied initially; upstream shell production is not required.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 36,
+        "prerequisites": [
+          "medium.basalt.v1"
+        ],
+        "focus": "Meet higher sustained production and automated storage requirements under the shared hard input rules."
+      },
+      "shulker_io": {
+        "output": true,
+        "input": false
+      },
+      "block_output_balance": true
+    },
+    {
+      "id": "hard.cobblestone_reassessment.v1",
+      "title": "Advanced Automatic Cobblestone Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:cobblestone"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:cobblestone"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 100000,
+        "min_per_game_hour": 100000,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Meet the shared hard initial-inventory constraints and run without manual replenishment.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Empty shulker boxes may be supplied initially; upstream shell production is not required.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "The complete machine, including collection, shulker packing and output storage, must fit within the published bounding-box dimensions in one dimension.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "machine_bounds"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 37,
+        "prerequisites": [
+          "medium.cobblestone.v1"
+        ],
+        "focus": "Meet higher sustained production and automated storage requirements under the shared hard input rules."
+      },
+      "shulker_io": {
+        "output": true,
+        "input": false
+      },
+      "block_output_balance": true,
+      "machine_limits": {
+        "max_size": [
+          48,
+          48,
+          48
+        ]
+      }
+    },
+    {
+      "id": "hard.witch.v1",
+      "title": "Witch Drop Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:redstone",
+        "minecraft:glowstone_dust",
+        "minecraft:sugar",
+        "minecraft:glass_bottle",
+        "minecraft:stick",
+        "minecraft:gunpowder",
+        "minecraft:spider_eye"
+      ],
+      "product_profiles": [
+        {
+          "id": "mixed",
+          "products": [
+            "minecraft:redstone",
+            "minecraft:glowstone_dust",
+            "minecraft:sugar",
+            "minecraft:glass_bottle",
+            "minecraft:stick",
+            "minecraft:gunpowder",
+            "minecraft:spider_eye"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 64,
+        "min_per_game_hour": 64.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Use actual vanilla spawning and sustained collected output; no separate spawning-layout template is required. Do not preplace target mobs as a consumable source of output.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 38,
+        "prerequisites": [
+          "medium.hostile_drops.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "hard.ghast.v1",
+      "title": "Ghast Tear Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:ghast_tear"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:ghast_tear"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 128,
+        "min_per_game_hour": 128.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Use actual vanilla spawning and sustained collected output; no separate spawning-layout template is required. Do not preplace target mobs as a consumable source of output.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 39,
+        "prerequisites": [
+          "medium.hostile_drops.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "hard.wither_skeleton.v1",
+      "title": "Wither Skeleton Product Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:wither_skeleton_skull",
+        "minecraft:coal",
+        "minecraft:bone"
+      ],
+      "product_profiles": [
+        {
+          "id": "combined",
+          "products": [
+            "minecraft:wither_skeleton_skull",
+            "minecraft:coal",
+            "minecraft:bone"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 128,
+        "min_per_game_hour": 128,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "product_targets": {
+          "minecraft:wither_skeleton_skull": {
+            "min_per_game_hour": 128,
+            "min_net_items": 128
+          },
+          "minecraft:coal": {
+            "min_per_game_hour": 2048,
+            "min_net_items": 2048
+          },
+          "minecraft:bone": {
+            "min_per_game_hour": 3072,
+            "min_net_items": 3072
+          }
+        }
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:diamond_sword",
+        "minecraft:netherite_sword"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Only one stationary evaluator player may perform the declared attack action; vanilla mechanics determine player-dependent drops. Do not preplace mobs as a consumable source of the target drops.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack"
+        ],
+        "rationale": "Evaluation permits one player performing only the declared attack interaction."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 40,
+        "prerequisites": [
+          "medium.hostile_drops.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "hard.drowned.v1",
+      "title": "Drowned Product Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:copper_ingot"
+      ],
+      "product_profiles": [
+        {
+          "id": "copper",
+          "products": [
+            "minecraft:copper_ingot"
+          ]
+        },
+        {
+          "id": "shells",
+          "products": [
+            "minecraft:nautilus_shell"
+          ]
+        },
+        {
+          "id": "tridents",
+          "products": [
+            "minecraft:trident"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 6000,
+        "window_ticks": 216000,
+        "min_net_items": 1152,
+        "min_per_game_hour": 384.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "product_targets": {
+          "minecraft:copper_ingot": {
+            "min_net_items": 1152,
+            "min_per_game_hour": 384
+          },
+          "minecraft:nautilus_shell": {
+            "min_net_items": 72,
+            "min_per_game_hour": 24
+          },
+          "minecraft:trident": {
+            "min_net_items": 18,
+            "min_per_game_hour": 6
+          }
+        }
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:diamond_sword",
+        "minecraft:netherite_sword"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Only one stationary evaluator player may perform the declared attack action; vanilla mechanics determine player-dependent drops. Do not preplace mobs as a consumable source of the target drops.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack"
+        ],
+        "rationale": "Evaluation permits one player performing only the declared attack interaction."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 41,
+        "prerequisites": [
+          "medium.hostile_drops.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "hard.guardian.v1",
+      "title": "Guardian Product Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:prismarine_shard",
+        "minecraft:prismarine_crystals",
+        "minecraft:cod"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:prismarine_shard",
+            "minecraft:prismarine_crystals",
+            "minecraft:cod"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection",
+        "source"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 24,
+        "min_per_game_hour": 24.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "product_targets": {
+          "minecraft:prismarine_shard": {
+            "min_net_items": 2400,
+            "min_per_game_hour": 2400
+          },
+          "minecraft:prismarine_crystals": {
+            "min_net_items": 600,
+            "min_per_game_hour": 600
+          },
+          "minecraft:cod": {
+            "min_net_items": 600,
+            "min_per_game_hour": 600
+          }
+        }
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Use actual vanilla spawning and sustained collected output; no separate spawning-layout template is required. Do not preplace target mobs as a consumable source of output.",
+        "Locate a naturally generated ocean monument and build the farm at that site.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "natural_source_provenance"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 42,
+        "prerequisites": [
+          "medium.hostile_drops.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "world_type": "natural",
+      "natural_source": "monument"
+    },
+    {
+      "id": "hard.glow_ink.v1",
+      "title": "Glow Ink Farm",
+      "description": "Continuously produce glow ink sacs and collect them in accessible storage. Meet the published net-output and sustained-rate targets without manual operation.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:glow_ink_sac"
+      ],
+      "product_profiles": [
+        {
+          "id": "glow_ink",
+          "products": [
+            "minecraft:glow_ink_sac"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 8000,
+        "min_per_game_hour": 8000.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Initial product stocks do not count as new output. No manual replenishment or handling is permitted during operation.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Empty shulker boxes may be supplied initially; upstream shell production is not required.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Only one idle spawning observer is permitted."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 43,
+        "prerequisites": [],
+        "focus": "Meet the published sustained output and storage requirements."
+      },
+      "world_type": "natural",
+      "shulker_io": {
+        "output": true,
+        "input": false
+      }
+    },
+    {
+      "id": "hard.mangrove.v1",
+      "title": "Mangrove Log Farm",
+      "description": "Continuously grow and automatically collect mangrove logs. Maintain a growing total stock of mangrove propagules. At most one stationary player may plant; harvesting, operating-material delivery and output packing must be automatic.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:mangrove_log"
+      ],
+      "product_profiles": [
+        {
+          "id": "mangrove_log",
+          "products": [
+            "minecraft:mangrove_log"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 12000,
+        "min_per_game_hour": 12000.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:mangrove_propagule"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Bone meal may be preloaded at one declared input container and must be distributed automatically; do not manually replenish it during operation.",
+        "Total mangrove propagule stock, including machine storage, loose items and the operating player inventory, must increase over the complete operation.",
+        "Only the declared player planting action is permitted; harvesting and collection must be automated.",
+        "Meet the shared hard initial-inventory constraints and run without manual replenishment.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Supply preloaded operating materials in shulker boxes at one input location. The machine must automatically unpack and distribute them; no preloading separate processing nodes. Empty box stock is permitted without an upstream shell farm.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "seed_balance",
+          "single_input"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "At most one stationary player may plant delivered mangrove propagules; no other player operation is permitted."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 44,
+        "prerequisites": [
+          "medium.overworld_logs.v1"
+        ],
+        "focus": "Handle mangrove growth and sustain propagule renewal with automatic collection and shulker storage."
+      },
+      "replanting_items": [
+        "minecraft:mangrove_propagule"
+      ],
+      "replanting_growth": {
+        "minimum_net_increase": 1,
+        "single_jungle_minimum": 0
+      },
+      "single_input_items": [
+        "minecraft:bone_meal",
+        "minecraft:mangrove_propagule"
+      ],
+      "shulker_io": {
+        "output": true,
+        "input": true
+      },
+      "block_output_balance": true,
+      "material_driver_items": [
+        "minecraft:mangrove_propagule"
+      ]
+    },
+    {
+      "id": "hard.azalea_leaves.v1",
+      "title": "Azalea Leaf Farm",
+      "description": "Continuously produce azalea leaves and flowering azalea leaves in one farm and automatically collect them in accessible storage. At most one evaluator player may continuously mine leaves with a hoe; growth, material supply and collection must be automatic. No manual planting or station-by-station handling is permitted.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:azalea_leaves",
+        "minecraft:flowering_azalea_leaves"
+      ],
+      "product_profiles": [
+        {
+          "id": "azalea_leaves",
+          "products": [
+            "minecraft:azalea_leaves",
+            "minecraft:flowering_azalea_leaves"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 512,
+        "min_per_game_hour": 512.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "aggregate_targets": [
+          {
+            "id": "azalea_leaves",
+            "products": [
+              "minecraft:azalea_leaves",
+              "minecraft:flowering_azalea_leaves"
+            ],
+            "target": {
+              "min_net_items": 6000,
+              "min_per_game_hour": 6000
+            }
+          }
+        ]
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:wooden_hoe",
+        "minecraft:stone_hoe",
+        "minecraft:iron_hoe",
+        "minecraft:golden_hoe",
+        "minecraft:diamond_hoe",
+        "minecraft:netherite_hoe"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Initial trees and leaf stock do not count as newly produced output.",
+        "Operating resources may be preloaded at one declared input and must be distributed automatically; no manual replenishment during operation.",
+        "Growth and harvesting must belong to one machine. No compatibility with other tree species is required.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Supply preloaded operating materials in shulker boxes at one input location. The machine must automatically unpack and distribute them; no preloading separate processing nodes. Empty box stock is permitted without an upstream shell farm.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "player_action_inventory",
+          "aggregate_output",
+          "integrated_operation"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack"
+        ],
+        "rationale": "At most one evaluator player may continuously mine leaves with a hoe. Growth, material supply and collection must be automatic."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 45,
+        "prerequisites": [
+          "medium.bone_meal_loop.v1"
+        ],
+        "focus": "Integrate azalea growth, harvesting and automatic leaf collection."
+      },
+      "mode_requirements": {
+        "integrated_operation": true,
+        "max_simultaneous_players": 1,
+        "manual_planting": false
+      },
+      "shulker_io": {
+        "output": true,
+        "input": true
+      },
+      "block_output_balance": true
+    },
+    {
+      "id": "hard.rooted_dirt.v1",
+      "title": "Renewable Rooted Dirt Production",
+      "description": "Continuously produce and automatically collect new rooted dirt. Bone meal may be supplied at one input location. No evaluator player may operate the machine. Meet the fixed output targets without drawing down pre-existing output or the initial soil and planting-material reserve.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:rooted_dirt"
+      ],
+      "product_profiles": [
+        {
+          "id": "rooted_dirt",
+          "products": [
+            "minecraft:rooted_dirt"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 12000,
+        "window_ticks": 72000,
+        "min_net_items": 2000,
+        "min_per_game_hour": 2000,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Bone meal may be supplied through one input location; no manual replenishment during operation.",
+        "Only newly produced rooted dirt counts. The combined soil and planting-material reserve must grow by at least the credited collected output.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "single_input",
+          "material_net_growth"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 46,
+        "prerequisites": [],
+        "focus": "Sustain new material production and automated harvesting without a player operator."
+      },
+      "block_output_balance": true,
+      "single_input_items": [
+        "minecraft:bone_meal"
+      ],
+      "material_growth": [
+        "minecraft:dirt",
+        "minecraft:coarse_dirt",
+        "minecraft:rooted_dirt",
+        "minecraft:grass_block",
+        "minecraft:podzol",
+        "minecraft:mycelium",
+        "minecraft:moss_block",
+        "minecraft:azalea",
+        "minecraft:flowering_azalea"
+      ]
+    },
+    {
+      "id": "hard.sculk.v1",
+      "title": "AFK Sculk Sensor, Shrieker and Vein Farm",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:sculk_sensor",
+        "minecraft:sculk_shrieker",
+        "minecraft:sculk_vein"
+      ],
+      "product_profiles": [
+        {
+          "id": "combined",
+          "products": [
+            "minecraft:sculk_sensor",
+            "minecraft:sculk_shrieker",
+            "minecraft:sculk_vein"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 128,
+        "min_per_game_hour": 128,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "product_targets": {
+          "minecraft:sculk_sensor": {
+            "min_per_game_hour": 1280,
+            "min_net_items": 1280
+          },
+          "minecraft:sculk_shrieker": {
+            "min_per_game_hour": 128,
+            "min_net_items": 128
+          },
+          "minecraft:sculk_vein": {
+            "min_per_game_hour": 1024,
+            "min_net_items": 1024
+          }
+        }
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:diamond_hoe",
+        "minecraft:netherite_hoe"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Sustain collection of all three target products without manual intervention during warmup and measurement.",
+        "One stationary player may continuously perform the declared harvesting action; no manual movement or resupply.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "resource_growth",
+          "player_action_inventory"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack"
+        ],
+        "rationale": "At most one stationary player may harvest the produced blocks. No player may manually supply experience mobs or replace production blocks."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 47,
+        "prerequisites": [],
+        "focus": "Sustain unattended production and collection of all three target products."
+      },
+      "resource_balance_items": [
+        "minecraft:sculk_sensor",
+        "minecraft:sculk_shrieker",
+        "minecraft:sculk_vein"
+      ],
+      "resource_balance_include_blocks": true,
+      "resource_balance_min_increase": 1,
+      "block_output_balance": true
+    },
+    {
+      "id": "hard.goat_horns.v1",
+      "title": "Classified Goat Horn Farm",
+      "description": "Continuously produce all eight published goat horn variants and automatically sort each variant into its own declared accessible storage. Verify the instrument component of each horn; a mixed container or a total item count alone is insufficient.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:goat_horn"
+      ],
+      "product_profiles": [
+        {
+          "id": "all_instruments",
+          "products": [
+            "minecraft:goat_horn"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 24,
+        "min_per_game_hour": 24.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:wheat"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Initial goats and operating feedstock are permitted, but preloaded horns do not count as new output.",
+        "Production and sorting must run without manual handling. At most one evaluator player may perform the necessary declared use interaction.",
+        "Every instrument variant must meet its output target and remain separated in its declared storage.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "player_action_inventory",
+          "item_components",
+          "classified_storage"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "use"
+        ],
+        "rationale": "Evaluation permits one player performing only the declared use interaction."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 48,
+        "prerequisites": [],
+        "focus": "Sustain horn production and classify all eight instrument variants."
+      },
+      "variant_targets": [
+        {
+          "id": "ponder_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:ponder_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        },
+        {
+          "id": "sing_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:sing_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        },
+        {
+          "id": "seek_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:seek_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        },
+        {
+          "id": "feel_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:feel_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        },
+        {
+          "id": "admire_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:admire_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        },
+        {
+          "id": "call_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:call_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        },
+        {
+          "id": "yearn_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:yearn_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        },
+        {
+          "id": "dream_goat_horn",
+          "item": "minecraft:goat_horn",
+          "components": {
+            "minecraft:instrument": "minecraft:dream_goat_horn"
+          },
+          "target": {
+            "min_net_items": 3,
+            "min_per_game_hour": 3.0
+          },
+          "separate_storage": true
+        }
+      ]
+    },
+    {
+      "id": "hard.shulker.v1",
+      "title": "Continuous Shulker Shell Production",
+      "description": "Continuously produce and automatically collect new shulker shells. Meet the fixed collected-output and sustained-rate targets; initially stored output does not count.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:shulker_shell"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:shulker_shell"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 300,
+        "min_per_game_hour": 300.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially for storage; only newly collected shulker shells count toward this task output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 49,
+        "prerequisites": [
+          "easy.iron.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      }
+    },
+    {
+      "id": "hard.granular_materials.v1",
+      "title": "Granular Material Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:sand"
+      ],
+      "product_profiles": [
+        {
+          "id": "sand",
+          "products": [
+            "minecraft:sand"
+          ]
+        },
+        {
+          "id": "red_sand",
+          "products": [
+            "minecraft:red_sand"
+          ]
+        },
+        {
+          "id": "gravel",
+          "products": [
+            "minecraft:gravel"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 36000,
+        "min_per_game_hour": 36000.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Empty shulker boxes may be supplied initially; upstream shell production is not required.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "source_replenishment",
+          "resource_balance"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 50,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "shulker_io": {
+        "output": true,
+        "input": false
+      },
+      "material_growth": [
+        "minecraft:sand"
+      ]
+    },
+    {
+      "id": "hard.amethyst.v1",
+      "title": "Integrated Natural-Geode Amethyst Farm",
+      "description": "Locate naturally generated amethyst geodes and build one integrated farm. Grow, harvest and collect new amethyst shards without moving or adding budding amethyst. At most one evaluator player may provide the declared harvesting action; no manual station-by-station operation is permitted.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:amethyst_shard"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:amethyst_shard"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 216000,
+        "window_ticks": 648000,
+        "min_net_items": 14400,
+        "min_per_game_hour": 1600.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:diamond_pickaxe",
+        "minecraft:netherite_pickaxe"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout measurement; initially stored products do not count as new output.",
+        "Do not manually replenish materials or modify the machine during evaluation.",
+        "Preserve the original positions of the budding amethyst sources. Do not create, replace or relocate them.",
+        "The machine must start and operate as one system and collect output automatically. Multiple independently operated harvesting stations are not accepted.",
+        "Measurement uses the default random tick speed and windows long enough to include complete growth and harvesting cycles. Initial grown crystals do not count as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "natural_source_provenance",
+          "protected_sources",
+          "integrated_operation"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack"
+        ],
+        "rationale": "At most one evaluator player may perform declared harvesting as part of the integrated machine operation. No manual station-by-station handling is permitted."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 51,
+        "prerequisites": [],
+        "focus": "Satisfy the published production and operating requirements."
+      },
+      "world_type": "natural",
+      "mode_requirements": {
+        "integrated_operation": true,
+        "max_simultaneous_players": 1,
+        "minimum_segment_ticks": 216000,
+        "single_declared_harvesting_operator": true,
+        "manual_station_operation": false
+      },
+      "natural_source": "amethyst_geode"
+    },
+    {
+      "id": "hard.redstone_factory.v1",
+      "title": "Configurable Redstone Component Factory",
+      "description": "Build one configurable factory. Supply sorted or mixed raw materials at a single input location, select a supported redstone component, and automatically deliver exactly 64 of that component per order. The same machine must fulfill different component orders; producing all upstream raw materials is not required.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:repeater",
+        "minecraft:comparator",
+        "minecraft:observer",
+        "minecraft:piston",
+        "minecraft:sticky_piston",
+        "minecraft:dispenser",
+        "minecraft:dropper",
+        "minecraft:hopper"
+      ],
+      "product_profiles": [
+        {
+          "id": "redstone_components",
+          "products": [
+            "minecraft:repeater",
+            "minecraft:comparator",
+            "minecraft:observer",
+            "minecraft:piston",
+            "minecraft:sticky_piston",
+            "minecraft:dispenser",
+            "minecraft:dropper",
+            "minecraft:hopper"
+          ],
+          "processing_inputs": [
+            "minecraft:acacia_log",
+            "minecraft:acacia_planks",
+            "minecraft:acacia_wood",
+            "minecraft:bamboo",
+            "minecraft:bamboo_block",
+            "minecraft:bamboo_planks",
+            "minecraft:birch_log",
+            "minecraft:birch_planks",
+            "minecraft:birch_wood",
+            "minecraft:bow",
+            "minecraft:cherry_log",
+            "minecraft:cherry_planks",
+            "minecraft:cherry_wood",
+            "minecraft:chest",
+            "minecraft:cobblestone",
+            "minecraft:crimson_hyphae",
+            "minecraft:crimson_planks",
+            "minecraft:crimson_stem",
+            "minecraft:dark_oak_log",
+            "minecraft:dark_oak_planks",
+            "minecraft:dark_oak_wood",
+            "minecraft:iron_block",
+            "minecraft:iron_ingot",
+            "minecraft:iron_nugget",
+            "minecraft:jungle_log",
+            "minecraft:jungle_planks",
+            "minecraft:jungle_wood",
+            "minecraft:mangrove_log",
+            "minecraft:mangrove_planks",
+            "minecraft:mangrove_wood",
+            "minecraft:oak_log",
+            "minecraft:oak_planks",
+            "minecraft:oak_wood",
+            "minecraft:pale_oak_log",
+            "minecraft:pale_oak_planks",
+            "minecraft:pale_oak_wood",
+            "minecraft:quartz",
+            "minecraft:redstone",
+            "minecraft:redstone_block",
+            "minecraft:redstone_torch",
+            "minecraft:slime_ball",
+            "minecraft:slime_block",
+            "minecraft:spruce_log",
+            "minecraft:spruce_planks",
+            "minecraft:spruce_wood",
+            "minecraft:stick",
+            "minecraft:stone",
+            "minecraft:string",
+            "minecraft:stripped_acacia_log",
+            "minecraft:stripped_acacia_wood",
+            "minecraft:stripped_bamboo_block",
+            "minecraft:stripped_birch_log",
+            "minecraft:stripped_birch_wood",
+            "minecraft:stripped_cherry_log",
+            "minecraft:stripped_cherry_wood",
+            "minecraft:stripped_crimson_hyphae",
+            "minecraft:stripped_crimson_stem",
+            "minecraft:stripped_dark_oak_log",
+            "minecraft:stripped_dark_oak_wood",
+            "minecraft:stripped_jungle_log",
+            "minecraft:stripped_jungle_wood",
+            "minecraft:stripped_mangrove_log",
+            "minecraft:stripped_mangrove_wood",
+            "minecraft:stripped_oak_log",
+            "minecraft:stripped_oak_wood",
+            "minecraft:stripped_pale_oak_log",
+            "minecraft:stripped_pale_oak_wood",
+            "minecraft:stripped_spruce_log",
+            "minecraft:stripped_spruce_wood",
+            "minecraft:stripped_warped_hyphae",
+            "minecraft:stripped_warped_stem",
+            "minecraft:warped_hyphae",
+            "minecraft:warped_planks",
+            "minecraft:warped_stem"
+          ],
+          "required_recipe_observers": [
+            "crafting"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 64,
+        "min_per_game_hour": 64.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 1
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 1,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "One input location accepts either pre-sorted or mixed feedstock.",
+        "Expose a component selector and order trigger; the evaluator requests different components from the same machine.",
+        "Deliver exactly 64 selected components per order, without unwanted components in that delivery.",
+        "Use the running vanilla recipes and account for consumed inputs, delivered output and intermediate stocks.",
+        "Do not manually reconfigure recipes, sort materials or replenish individual processing nodes after an order starts.",
+        "Upstream raw-material farms and stop/restart recovery are not required.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "configurable_batches",
+          "recipe_accounting",
+          "single_input",
+          "actor_policy",
+          "chest_clearance"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 52,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "order_batch": {
+        "units": 64,
+        "selection": "per_order",
+        "input_locations": 1
+      },
+      "order_window_ticks": 12000,
+      "order_settle_ticks": 200,
+      "processing_inputs": [
+        "minecraft:acacia_log",
+        "minecraft:acacia_planks",
+        "minecraft:acacia_wood",
+        "minecraft:bamboo",
+        "minecraft:bamboo_block",
+        "minecraft:bamboo_planks",
+        "minecraft:birch_log",
+        "minecraft:birch_planks",
+        "minecraft:birch_wood",
+        "minecraft:bow",
+        "minecraft:cherry_log",
+        "minecraft:cherry_planks",
+        "minecraft:cherry_wood",
+        "minecraft:chest",
+        "minecraft:cobblestone",
+        "minecraft:crimson_hyphae",
+        "minecraft:crimson_planks",
+        "minecraft:crimson_stem",
+        "minecraft:dark_oak_log",
+        "minecraft:dark_oak_planks",
+        "minecraft:dark_oak_wood",
+        "minecraft:iron_block",
+        "minecraft:iron_ingot",
+        "minecraft:iron_nugget",
+        "minecraft:jungle_log",
+        "minecraft:jungle_planks",
+        "minecraft:jungle_wood",
+        "minecraft:mangrove_log",
+        "minecraft:mangrove_planks",
+        "minecraft:mangrove_wood",
+        "minecraft:oak_log",
+        "minecraft:oak_planks",
+        "minecraft:oak_wood",
+        "minecraft:pale_oak_log",
+        "minecraft:pale_oak_planks",
+        "minecraft:pale_oak_wood",
+        "minecraft:quartz",
+        "minecraft:redstone",
+        "minecraft:redstone_block",
+        "minecraft:redstone_torch",
+        "minecraft:slime_ball",
+        "minecraft:slime_block",
+        "minecraft:spruce_log",
+        "minecraft:spruce_planks",
+        "minecraft:spruce_wood",
+        "minecraft:stick",
+        "minecraft:stone",
+        "minecraft:string",
+        "minecraft:stripped_acacia_log",
+        "minecraft:stripped_acacia_wood",
+        "minecraft:stripped_bamboo_block",
+        "minecraft:stripped_birch_log",
+        "minecraft:stripped_birch_wood",
+        "minecraft:stripped_cherry_log",
+        "minecraft:stripped_cherry_wood",
+        "minecraft:stripped_crimson_hyphae",
+        "minecraft:stripped_crimson_stem",
+        "minecraft:stripped_dark_oak_log",
+        "minecraft:stripped_dark_oak_wood",
+        "minecraft:stripped_jungle_log",
+        "minecraft:stripped_jungle_wood",
+        "minecraft:stripped_mangrove_log",
+        "minecraft:stripped_mangrove_wood",
+        "minecraft:stripped_oak_log",
+        "minecraft:stripped_oak_wood",
+        "minecraft:stripped_pale_oak_log",
+        "minecraft:stripped_pale_oak_wood",
+        "minecraft:stripped_spruce_log",
+        "minecraft:stripped_spruce_wood",
+        "minecraft:stripped_warped_hyphae",
+        "minecraft:stripped_warped_stem",
+        "minecraft:warped_hyphae",
+        "minecraft:warped_planks",
+        "minecraft:warped_stem"
+      ],
+      "single_input_items": [
+        "minecraft:acacia_log",
+        "minecraft:acacia_planks",
+        "minecraft:acacia_wood",
+        "minecraft:bamboo",
+        "minecraft:bamboo_block",
+        "minecraft:bamboo_planks",
+        "minecraft:birch_log",
+        "minecraft:birch_planks",
+        "minecraft:birch_wood",
+        "minecraft:bow",
+        "minecraft:cherry_log",
+        "minecraft:cherry_planks",
+        "minecraft:cherry_wood",
+        "minecraft:chest",
+        "minecraft:cobblestone",
+        "minecraft:crimson_hyphae",
+        "minecraft:crimson_planks",
+        "minecraft:crimson_stem",
+        "minecraft:dark_oak_log",
+        "minecraft:dark_oak_planks",
+        "minecraft:dark_oak_wood",
+        "minecraft:iron_block",
+        "minecraft:iron_ingot",
+        "minecraft:iron_nugget",
+        "minecraft:jungle_log",
+        "minecraft:jungle_planks",
+        "minecraft:jungle_wood",
+        "minecraft:mangrove_log",
+        "minecraft:mangrove_planks",
+        "minecraft:mangrove_wood",
+        "minecraft:oak_log",
+        "minecraft:oak_planks",
+        "minecraft:oak_wood",
+        "minecraft:pale_oak_log",
+        "minecraft:pale_oak_planks",
+        "minecraft:pale_oak_wood",
+        "minecraft:quartz",
+        "minecraft:redstone",
+        "minecraft:redstone_block",
+        "minecraft:redstone_torch",
+        "minecraft:slime_ball",
+        "minecraft:slime_block",
+        "minecraft:spruce_log",
+        "minecraft:spruce_planks",
+        "minecraft:spruce_wood",
+        "minecraft:stick",
+        "minecraft:stone",
+        "minecraft:string",
+        "minecraft:stripped_acacia_log",
+        "minecraft:stripped_acacia_wood",
+        "minecraft:stripped_bamboo_block",
+        "minecraft:stripped_birch_log",
+        "minecraft:stripped_birch_wood",
+        "minecraft:stripped_cherry_log",
+        "minecraft:stripped_cherry_wood",
+        "minecraft:stripped_crimson_hyphae",
+        "minecraft:stripped_crimson_stem",
+        "minecraft:stripped_dark_oak_log",
+        "minecraft:stripped_dark_oak_wood",
+        "minecraft:stripped_jungle_log",
+        "minecraft:stripped_jungle_wood",
+        "minecraft:stripped_mangrove_log",
+        "minecraft:stripped_mangrove_wood",
+        "minecraft:stripped_oak_log",
+        "minecraft:stripped_oak_wood",
+        "minecraft:stripped_pale_oak_log",
+        "minecraft:stripped_pale_oak_wood",
+        "minecraft:stripped_spruce_log",
+        "minecraft:stripped_spruce_wood",
+        "minecraft:stripped_warped_hyphae",
+        "minecraft:stripped_warped_stem",
+        "minecraft:warped_hyphae",
+        "minecraft:warped_planks",
+        "minecraft:warped_stem"
+      ],
+      "required_recipe_observers": [
+        "crafting"
+      ]
+    },
+    {
+      "id": "hard.potion_brewer.v1",
+      "title": "All-Potion Brewing Machine",
+      "description": "Build one selectable brewing machine that supports every published vanilla-brewable potion state in drinkable, splash and lingering form. Select orders through the machine controls and automatically deliver a three-bottle batch of the requested potion without rebuilding recipes.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:potion",
+        "minecraft:splash_potion",
+        "minecraft:lingering_potion"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:potion",
+            "minecraft:splash_potion",
+            "minecraft:lingering_potion"
+          ],
+          "processing_inputs": [
+            "minecraft:blaze_powder",
+            "minecraft:breeze_rod",
+            "minecraft:cobweb",
+            "minecraft:dragon_breath",
+            "minecraft:fermented_spider_eye",
+            "minecraft:ghast_tear",
+            "minecraft:glistering_melon_slice",
+            "minecraft:glowstone_dust",
+            "minecraft:golden_carrot",
+            "minecraft:gunpowder",
+            "minecraft:magma_cream",
+            "minecraft:nether_wart",
+            "minecraft:phantom_membrane",
+            "minecraft:potion",
+            "minecraft:pufferfish",
+            "minecraft:rabbit_foot",
+            "minecraft:redstone",
+            "minecraft:slime_block",
+            "minecraft:spider_eye",
+            "minecraft:stone",
+            "minecraft:sugar",
+            "minecraft:turtle_helmet"
+          ],
+          "required_recipe_observers": [
+            "brewing"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 64,
+        "min_per_game_hour": 64.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout measurement; initially stored products do not count as new output.",
+        "Do not manually replenish materials or modify the machine during evaluation.",
+        "Support all published base, extended-duration and strengthened variants that have vanilla brewing recipes.",
+        "Use one input location for supplied ingredients, brewing fuel and water bottles. Automatically distribute inputs and collect output; no upstream farms are required.",
+        "Verify the actual potion contents, bottle form and batch quantity. Counting arbitrary potion items is insufficient.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "brew_orders",
+          "item_components",
+          "recipe_accounting",
+          "single_input"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 53,
+        "prerequisites": [],
+        "focus": "Satisfy the published production and operating requirements."
+      },
+      "brew_orders": [
+        {
+          "id": "awkward_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:awkward",
+          "count": 3
+        },
+        {
+          "id": "awkward_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:awkward",
+          "count": 3
+        },
+        {
+          "id": "awkward_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:awkward",
+          "count": 3
+        },
+        {
+          "id": "fire_resistance_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:fire_resistance",
+          "count": 3
+        },
+        {
+          "id": "fire_resistance_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:fire_resistance",
+          "count": 3
+        },
+        {
+          "id": "fire_resistance_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:fire_resistance",
+          "count": 3
+        },
+        {
+          "id": "harming_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:harming",
+          "count": 3
+        },
+        {
+          "id": "harming_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:harming",
+          "count": 3
+        },
+        {
+          "id": "harming_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:harming",
+          "count": 3
+        },
+        {
+          "id": "healing_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:healing",
+          "count": 3
+        },
+        {
+          "id": "healing_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:healing",
+          "count": 3
+        },
+        {
+          "id": "healing_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:healing",
+          "count": 3
+        },
+        {
+          "id": "infested_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:infested",
+          "count": 3
+        },
+        {
+          "id": "infested_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:infested",
+          "count": 3
+        },
+        {
+          "id": "infested_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:infested",
+          "count": 3
+        },
+        {
+          "id": "invisibility_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:invisibility",
+          "count": 3
+        },
+        {
+          "id": "invisibility_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:invisibility",
+          "count": 3
+        },
+        {
+          "id": "invisibility_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:invisibility",
+          "count": 3
+        },
+        {
+          "id": "leaping_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:leaping",
+          "count": 3
+        },
+        {
+          "id": "leaping_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:leaping",
+          "count": 3
+        },
+        {
+          "id": "leaping_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:leaping",
+          "count": 3
+        },
+        {
+          "id": "long_fire_resistance_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_fire_resistance",
+          "count": 3
+        },
+        {
+          "id": "long_fire_resistance_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_fire_resistance",
+          "count": 3
+        },
+        {
+          "id": "long_fire_resistance_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_fire_resistance",
+          "count": 3
+        },
+        {
+          "id": "long_invisibility_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_invisibility",
+          "count": 3
+        },
+        {
+          "id": "long_invisibility_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_invisibility",
+          "count": 3
+        },
+        {
+          "id": "long_invisibility_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_invisibility",
+          "count": 3
+        },
+        {
+          "id": "long_leaping_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_leaping",
+          "count": 3
+        },
+        {
+          "id": "long_leaping_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_leaping",
+          "count": 3
+        },
+        {
+          "id": "long_leaping_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_leaping",
+          "count": 3
+        },
+        {
+          "id": "long_night_vision_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_night_vision",
+          "count": 3
+        },
+        {
+          "id": "long_night_vision_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_night_vision",
+          "count": 3
+        },
+        {
+          "id": "long_night_vision_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_night_vision",
+          "count": 3
+        },
+        {
+          "id": "long_poison_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_poison",
+          "count": 3
+        },
+        {
+          "id": "long_poison_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_poison",
+          "count": 3
+        },
+        {
+          "id": "long_poison_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_poison",
+          "count": 3
+        },
+        {
+          "id": "long_regeneration_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_regeneration",
+          "count": 3
+        },
+        {
+          "id": "long_regeneration_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_regeneration",
+          "count": 3
+        },
+        {
+          "id": "long_regeneration_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_regeneration",
+          "count": 3
+        },
+        {
+          "id": "long_slow_falling_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_slow_falling",
+          "count": 3
+        },
+        {
+          "id": "long_slow_falling_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_slow_falling",
+          "count": 3
+        },
+        {
+          "id": "long_slow_falling_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_slow_falling",
+          "count": 3
+        },
+        {
+          "id": "long_slowness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_slowness",
+          "count": 3
+        },
+        {
+          "id": "long_slowness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_slowness",
+          "count": 3
+        },
+        {
+          "id": "long_slowness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_slowness",
+          "count": 3
+        },
+        {
+          "id": "long_strength_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_strength",
+          "count": 3
+        },
+        {
+          "id": "long_strength_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_strength",
+          "count": 3
+        },
+        {
+          "id": "long_strength_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_strength",
+          "count": 3
+        },
+        {
+          "id": "long_swiftness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_swiftness",
+          "count": 3
+        },
+        {
+          "id": "long_swiftness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_swiftness",
+          "count": 3
+        },
+        {
+          "id": "long_swiftness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_swiftness",
+          "count": 3
+        },
+        {
+          "id": "long_turtle_master_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_turtle_master",
+          "count": 3
+        },
+        {
+          "id": "long_turtle_master_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_turtle_master",
+          "count": 3
+        },
+        {
+          "id": "long_turtle_master_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_turtle_master",
+          "count": 3
+        },
+        {
+          "id": "long_water_breathing_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_water_breathing",
+          "count": 3
+        },
+        {
+          "id": "long_water_breathing_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_water_breathing",
+          "count": 3
+        },
+        {
+          "id": "long_water_breathing_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_water_breathing",
+          "count": 3
+        },
+        {
+          "id": "long_weakness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:long_weakness",
+          "count": 3
+        },
+        {
+          "id": "long_weakness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:long_weakness",
+          "count": 3
+        },
+        {
+          "id": "long_weakness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:long_weakness",
+          "count": 3
+        },
+        {
+          "id": "mundane_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:mundane",
+          "count": 3
+        },
+        {
+          "id": "mundane_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:mundane",
+          "count": 3
+        },
+        {
+          "id": "mundane_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:mundane",
+          "count": 3
+        },
+        {
+          "id": "night_vision_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:night_vision",
+          "count": 3
+        },
+        {
+          "id": "night_vision_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:night_vision",
+          "count": 3
+        },
+        {
+          "id": "night_vision_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:night_vision",
+          "count": 3
+        },
+        {
+          "id": "oozing_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:oozing",
+          "count": 3
+        },
+        {
+          "id": "oozing_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:oozing",
+          "count": 3
+        },
+        {
+          "id": "oozing_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:oozing",
+          "count": 3
+        },
+        {
+          "id": "poison_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:poison",
+          "count": 3
+        },
+        {
+          "id": "poison_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:poison",
+          "count": 3
+        },
+        {
+          "id": "poison_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:poison",
+          "count": 3
+        },
+        {
+          "id": "regeneration_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:regeneration",
+          "count": 3
+        },
+        {
+          "id": "regeneration_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:regeneration",
+          "count": 3
+        },
+        {
+          "id": "regeneration_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:regeneration",
+          "count": 3
+        },
+        {
+          "id": "slow_falling_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:slow_falling",
+          "count": 3
+        },
+        {
+          "id": "slow_falling_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:slow_falling",
+          "count": 3
+        },
+        {
+          "id": "slow_falling_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:slow_falling",
+          "count": 3
+        },
+        {
+          "id": "slowness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:slowness",
+          "count": 3
+        },
+        {
+          "id": "slowness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:slowness",
+          "count": 3
+        },
+        {
+          "id": "slowness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:slowness",
+          "count": 3
+        },
+        {
+          "id": "strength_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strength",
+          "count": 3
+        },
+        {
+          "id": "strength_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strength",
+          "count": 3
+        },
+        {
+          "id": "strength_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strength",
+          "count": 3
+        },
+        {
+          "id": "strong_harming_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_harming",
+          "count": 3
+        },
+        {
+          "id": "strong_harming_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_harming",
+          "count": 3
+        },
+        {
+          "id": "strong_harming_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_harming",
+          "count": 3
+        },
+        {
+          "id": "strong_healing_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_healing",
+          "count": 3
+        },
+        {
+          "id": "strong_healing_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_healing",
+          "count": 3
+        },
+        {
+          "id": "strong_healing_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_healing",
+          "count": 3
+        },
+        {
+          "id": "strong_leaping_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_leaping",
+          "count": 3
+        },
+        {
+          "id": "strong_leaping_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_leaping",
+          "count": 3
+        },
+        {
+          "id": "strong_leaping_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_leaping",
+          "count": 3
+        },
+        {
+          "id": "strong_poison_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_poison",
+          "count": 3
+        },
+        {
+          "id": "strong_poison_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_poison",
+          "count": 3
+        },
+        {
+          "id": "strong_poison_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_poison",
+          "count": 3
+        },
+        {
+          "id": "strong_regeneration_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_regeneration",
+          "count": 3
+        },
+        {
+          "id": "strong_regeneration_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_regeneration",
+          "count": 3
+        },
+        {
+          "id": "strong_regeneration_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_regeneration",
+          "count": 3
+        },
+        {
+          "id": "strong_slowness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_slowness",
+          "count": 3
+        },
+        {
+          "id": "strong_slowness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_slowness",
+          "count": 3
+        },
+        {
+          "id": "strong_slowness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_slowness",
+          "count": 3
+        },
+        {
+          "id": "strong_strength_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_strength",
+          "count": 3
+        },
+        {
+          "id": "strong_strength_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_strength",
+          "count": 3
+        },
+        {
+          "id": "strong_strength_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_strength",
+          "count": 3
+        },
+        {
+          "id": "strong_swiftness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_swiftness",
+          "count": 3
+        },
+        {
+          "id": "strong_swiftness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_swiftness",
+          "count": 3
+        },
+        {
+          "id": "strong_swiftness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_swiftness",
+          "count": 3
+        },
+        {
+          "id": "strong_turtle_master_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:strong_turtle_master",
+          "count": 3
+        },
+        {
+          "id": "strong_turtle_master_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:strong_turtle_master",
+          "count": 3
+        },
+        {
+          "id": "strong_turtle_master_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:strong_turtle_master",
+          "count": 3
+        },
+        {
+          "id": "swiftness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:swiftness",
+          "count": 3
+        },
+        {
+          "id": "swiftness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:swiftness",
+          "count": 3
+        },
+        {
+          "id": "swiftness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:swiftness",
+          "count": 3
+        },
+        {
+          "id": "thick_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:thick",
+          "count": 3
+        },
+        {
+          "id": "thick_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:thick",
+          "count": 3
+        },
+        {
+          "id": "thick_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:thick",
+          "count": 3
+        },
+        {
+          "id": "turtle_master_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:turtle_master",
+          "count": 3
+        },
+        {
+          "id": "turtle_master_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:turtle_master",
+          "count": 3
+        },
+        {
+          "id": "turtle_master_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:turtle_master",
+          "count": 3
+        },
+        {
+          "id": "water_breathing_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:water_breathing",
+          "count": 3
+        },
+        {
+          "id": "water_breathing_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:water_breathing",
+          "count": 3
+        },
+        {
+          "id": "water_breathing_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:water_breathing",
+          "count": 3
+        },
+        {
+          "id": "weakness_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:weakness",
+          "count": 3
+        },
+        {
+          "id": "weakness_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:weakness",
+          "count": 3
+        },
+        {
+          "id": "weakness_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:weakness",
+          "count": 3
+        },
+        {
+          "id": "weaving_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:weaving",
+          "count": 3
+        },
+        {
+          "id": "weaving_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:weaving",
+          "count": 3
+        },
+        {
+          "id": "weaving_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:weaving",
+          "count": 3
+        },
+        {
+          "id": "wind_charged_potion",
+          "item": "minecraft:potion",
+          "potion": "minecraft:wind_charged",
+          "count": 3
+        },
+        {
+          "id": "wind_charged_splash_potion",
+          "item": "minecraft:splash_potion",
+          "potion": "minecraft:wind_charged",
+          "count": 3
+        },
+        {
+          "id": "wind_charged_lingering_potion",
+          "item": "minecraft:lingering_potion",
+          "potion": "minecraft:wind_charged",
+          "count": 3
+        }
+      ],
+      "mode_requirements": {
+        "rebuild_between_modes": false,
+        "batch_size": 3,
+        "selection": "machine_controls",
+        "water_bottles_may_be_inputs": true
+      },
+      "order_window_ticks": 12000,
+      "order_settle_ticks": 200,
+      "processing_inputs": [
+        "minecraft:blaze_powder",
+        "minecraft:breeze_rod",
+        "minecraft:cobweb",
+        "minecraft:dragon_breath",
+        "minecraft:fermented_spider_eye",
+        "minecraft:ghast_tear",
+        "minecraft:glistering_melon_slice",
+        "minecraft:glowstone_dust",
+        "minecraft:golden_carrot",
+        "minecraft:gunpowder",
+        "minecraft:magma_cream",
+        "minecraft:nether_wart",
+        "minecraft:phantom_membrane",
+        "minecraft:potion",
+        "minecraft:pufferfish",
+        "minecraft:rabbit_foot",
+        "minecraft:redstone",
+        "minecraft:slime_block",
+        "minecraft:spider_eye",
+        "minecraft:stone",
+        "minecraft:sugar",
+        "minecraft:turtle_helmet"
+      ],
+      "single_input_items": [
+        "minecraft:blaze_powder",
+        "minecraft:breeze_rod",
+        "minecraft:cobweb",
+        "minecraft:dragon_breath",
+        "minecraft:fermented_spider_eye",
+        "minecraft:ghast_tear",
+        "minecraft:glistering_melon_slice",
+        "minecraft:glowstone_dust",
+        "minecraft:golden_carrot",
+        "minecraft:gunpowder",
+        "minecraft:magma_cream",
+        "minecraft:nether_wart",
+        "minecraft:phantom_membrane",
+        "minecraft:potion",
+        "minecraft:pufferfish",
+        "minecraft:rabbit_foot",
+        "minecraft:redstone",
+        "minecraft:slime_block",
+        "minecraft:spider_eye",
+        "minecraft:stone",
+        "minecraft:sugar",
+        "minecraft:turtle_helmet"
+      ],
+      "required_recipe_observers": [
+        "brewing"
+      ]
+    },
+    {
+      "id": "hard.magma_products.v1",
+      "title": "Magma Cube and Froglight Farm",
+      "description": "Build one farm that continuously produces magma cream and all three froglight colors and collects them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:magma_cream",
+        "minecraft:ochre_froglight",
+        "minecraft:verdant_froglight",
+        "minecraft:pearlescent_froglight"
+      ],
+      "product_profiles": [
+        {
+          "id": "combined",
+          "products": [
+            "minecraft:magma_cream",
+            "minecraft:ochre_froglight",
+            "minecraft:verdant_froglight",
+            "minecraft:pearlescent_froglight"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 6000,
+        "window_ticks": 72000,
+        "min_net_items": 16,
+        "min_per_game_hour": 16.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "product_targets": {
+          "minecraft:magma_cream": {
+            "min_net_items": 8000,
+            "min_per_game_hour": 8000.0
+          }
+        },
+        "aggregate_targets": [
+          {
+            "id": "froglights",
+            "products": [
+              "minecraft:ochre_froglight",
+              "minecraft:verdant_froglight",
+              "minecraft:pearlescent_froglight"
+            ],
+            "target": {
+              "min_net_items": 106667,
+              "min_per_game_hour": 106667.0
+            }
+          }
+        ]
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "Use actual vanilla spawning and sustained collected output; no separate spawning-layout template is required. Do not preplace target mobs as a consumable source of output.",
+        "Use vanilla magma cube spawning in a suitable biome; retain the biome conditions supplied by the world. Initial frogs are permitted, but preplaced magma cubes may not supply the measured output.",
+        "The combined profile requires magma cream and all three froglight colors from the same submitted farm. No evaluator player may operate the machine; an idle spawning observer is permitted.",
+        "Do not use any spawner. Magma cubes must be continuously supplied by natural spawning.",
+        "Collect at least 8,000 magma cream per game hour and at least 106,667 froglights per game hour summed across the three colors. Every color must also meet its published individual minimum; no fixed color ratio is required.",
+        "Automatically pack collected output into shulker-box items at the declared output. Full and partial boxes count by their actual contents; empty shells earn no output credit.",
+        "Empty shulker boxes may be supplied initially; upstream shell production is not required.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "forbidden_blocks",
+          "aggregate_output"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "observer",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation permits one stationary observer with no operating actions."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 54,
+        "prerequisites": [
+          "medium.slime.v1"
+        ],
+        "focus": "Combine biome-dependent magma cube spawning, processing, and automatic collection of magma cream and froglights in one farm."
+      },
+      "forbidden_blocks": [
+        "minecraft:spawner",
+        "minecraft:trial_spawner"
+      ],
+      "shulker_io": {
+        "output": true,
+        "input": false
+      }
+    },
+    {
+      "id": "hard.raid.v1",
+      "title": "Raid and Patrol Product Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:emerald",
+        "minecraft:totem_of_undying"
+      ],
+      "product_profiles": [
+        {
+          "id": "valuables",
+          "products": [
+            "minecraft:emerald",
+            "minecraft:totem_of_undying"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 3,
+        "min_per_game_hour": 3.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3,
+        "product_targets": {
+          "minecraft:emerald": {
+            "min_net_items": 512,
+            "min_per_game_hour": 512
+          },
+          "minecraft:totem_of_undying": {
+            "min_net_items": 24,
+            "min_per_game_hour": 24
+          }
+        }
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:diamond_sword",
+        "minecraft:netherite_sword"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "The same operating player must be able to drink supplied ominous bottles and attack. Automatically supply consumables and record their use; do not manually replenish during measurement.",
+        "Ominous bottles may be preloaded at one input location and automatically delivered to the operating player.",
+        "Record bottle consumption; bottle reserves are allowed to decrease. A bottle-production farm is not part of this task.",
+        "Ominous bottles are not an output target of the raid farm.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "item_components",
+          "raid_operator",
+          "consumable_accounting",
+          "single_input",
+          "initial_entity_policy"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack_and_use"
+        ],
+        "rationale": "One stationary player may perform both the required combat action and the declared consumable use."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 55,
+        "prerequisites": [
+          "hard.witch.v1"
+        ],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "single_input_items": [
+        "minecraft:ominous_bottle"
+      ],
+      "forbidden_initial_entities": [
+        "minecraft:evoker",
+        "minecraft:vindicator"
+      ]
+    },
+    {
+      "id": "hard.nether_stars.v1",
+      "title": "Natural-Bedrock Nether Star Production",
+      "description": "Build an unattended machine that produces and collects nether stars using a naturally generated bedrock site. Soul sand and wither skeleton skulls may be supplied initially and their consumption must be accounted for.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:nether_star"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:nether_star"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 72000,
+        "min_net_items": 64,
+        "min_per_game_hour": 64.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "processing",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout measurement; initially stored products do not count as new output.",
+        "Do not manually replenish materials or modify the machine during evaluation.",
+        "The evaluator does not provide an operating player. Summoning, killing and collection must operate without manual intervention.",
+        "Use original naturally generated bedrock; do not place replacement bedrock or artificial containment blocks.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "natural_source_provenance",
+          "recipe_accounting",
+          "initial_entity_policy"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 56,
+        "prerequisites": [],
+        "focus": "Satisfy the published production and operating requirements."
+      },
+      "world_type": "natural",
+      "natural_source": "bedrock",
+      "forbidden_initial_entities": [
+        "minecraft:wither"
+      ]
+    },
+    {
+      "id": "hard.trial_products.v1",
+      "title": "Natural Trial Chamber Product Farm",
+      "description": "Locate a naturally generated trial chamber and build an automatically recovering farm for the selected repeatable trial product. Use the chamber's original trial spawners and collect newly produced items in accessible storage.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:breeze_rod"
+      ],
+      "product_profiles": [
+        {
+          "id": "rods",
+          "products": [
+            "minecraft:breeze_rod"
+          ]
+        },
+        {
+          "id": "keys",
+          "products": [
+            "minecraft:trial_key"
+          ]
+        },
+        {
+          "id": "ominous_keys",
+          "products": [
+            "minecraft:ominous_trial_key"
+          ],
+          "required_checks": [
+            "consumable_accounting",
+            "item_components"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection",
+        "source"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 216000,
+        "min_net_items": 9,
+        "min_per_game_hour": 3.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [
+        "minecraft:diamond_sword",
+        "minecraft:netherite_sword"
+      ],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout measurement; initially stored products do not count as new output.",
+        "Do not manually replenish materials or modify the machine during evaluation.",
+        "Do not create, replace or duplicate trial spawners. Permit full vanilla challenge and cooldown cycles.",
+        "At most one evaluator player may perform necessary attacks and drink automatically supplied ominous bottles. Bottles may be preloaded consumables.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "natural_source_provenance",
+          "combined_player_operation"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "player_action",
+        "allowed_drivers": [
+          "none",
+          "attack",
+          "attack_and_use"
+        ],
+        "rationale": "At most one evaluator player may provide only the declared necessary interaction."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 57,
+        "prerequisites": [],
+        "focus": "Satisfy the published production and operating requirements."
+      },
+      "world_type": "natural",
+      "natural_source": "trial_chambers"
+    },
+    {
+      "id": "hard.obsidian.v1",
+      "title": "Obsidian Production",
+      "description": "Continuously produce the selected profile's items and collect them in accessible storage. Every selected product must meet the fixed net-output and rate targets in three consecutive measurement windows. Declare all consumed inputs and their sources. Player actions are limited to the published actor policy.",
+      "mode": "threshold",
+      "primary_products": [
+        "minecraft:obsidian"
+      ],
+      "product_profiles": [
+        {
+          "id": "default",
+          "products": [
+            "minecraft:obsidian"
+          ]
+        }
+      ],
+      "required_roles": [
+        "production",
+        "collection"
+      ],
+      "mechanism_groups": [],
+      "measurement": {
+        "warmup_ticks": 1200,
+        "window_ticks": 36000,
+        "min_net_items": 600,
+        "min_per_game_hour": 1200.0,
+        "random_tick_speed": 3,
+        "mode": "sprint",
+        "allowed_modes": [
+          "natural",
+          "sprint"
+        ],
+        "segments": 3
+      },
+      "storage": {
+        "reserved_stack_slots_per_primary": 54,
+        "min_free_stack_slots": 1,
+        "headroom_ticks": 6000
+      },
+      "allowed_driver_tools": [],
+      "sources": [],
+      "suite": "production_curriculum",
+      "difficulty": "hard",
+      "production_kind": "renewable",
+      "calibration_status": "uncalibrated",
+      "operating_requirements": [
+        "Maintain production throughout all measurement windows; initially stored output does not count as new production.",
+        "No evaluator player may mine obsidian. Count initial and final obsidian blocks, inventories and loose items to exclude depletion of preplaced obsidian as new production.",
+        "Any evaluator player, including an idle observer, must remain in Survival mode and survive throughout warmup and measurement; death or respawn fails acceptance.",
+        "Empty shulker boxes may be supplied initially as operating consumables; no upstream shulker-shell farm is required. Empty boxes do not count toward product output."
+      ],
+      "acceptance": {
+        "required_checks": [
+          "net_output",
+          "sustained_output",
+          "storage_capacity",
+          "chest_clearance",
+          "actor_policy",
+          "input_consumption",
+          "resource_growth"
+        ],
+        "support": "supported"
+      },
+      "actor_policy": {
+        "presence": "none",
+        "allowed_drivers": [
+          "none"
+        ],
+        "rationale": "Evaluation does not spawn a fake player."
+      },
+      "curriculum": {
+        "stage": 3,
+        "order": 58,
+        "prerequisites": [],
+        "focus": "Meet the production, resource, and operating requirements of this task."
+      },
+      "resource_balance_items": [
+        "minecraft:obsidian"
+      ],
+      "resource_balance_include_blocks": true,
+      "resource_balance_min_increase": 32
+    }
+  ]
+}
