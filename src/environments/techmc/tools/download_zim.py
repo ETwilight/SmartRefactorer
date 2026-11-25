@@ -1,4 +1,4 @@
-"""Range acquisition for mirrors that stall on multi-GB single responses."""
+"""Download the offline Wiki archive in verified, resumable HTTP ranges."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -9,6 +9,8 @@ import concurrent.futures
 
 
 def main():
+    """Acquire range chunks, assemble them in order, and write archive provenance."""
+
     url = 'https://download.kiwix.org/zim/other/minecraft.wiki_en_all_2026-08.zim'
     target = ROOT / 'knowledge/wiki/zim/minecraft.wiki_en_all_2026-08.zim'
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +29,7 @@ def main():
         etag = response.headers.get('ETag')
         modified = response.headers.get('Last-Modified')
         response.read()
-    # Bind every independently cached chunk to the same archive validator.
+    # All cached ranges share this archive size, redirect target, and HTTP validator.
     directory = target.parent / (target.name + '.chunks')
     directory.mkdir(exist_ok=True)
     descriptor = {
@@ -44,6 +46,8 @@ def main():
     chunk_size = 4 * 1024 * 1024
 
     def get_chunk(index):
+        """Reuse a verified chunk or download its exact range with archive validators."""
+
         start = index * chunk_size
         end = min(total - 1, start + chunk_size - 1)
         path = directory / f'{index:05d}'
@@ -89,6 +93,7 @@ def main():
                 time.sleep(2**attempt)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        # map preserves range order even when worker downloads finish out of order.
         chunks = list(pool.map(get_chunk, range((total + chunk_size - 1) // chunk_size)))
     part = target.with_suffix('.zim.part')
     with part.open('wb') as out:
@@ -109,7 +114,7 @@ def main():
             'verification': 'HTTP range validators + local SHA256; not an official signature',
         },
     )
-    # Individually verified chunks are redundant after atomic assembly.
+    # The complete archive now replaces the temporary assembly; release chunk storage.
     for chunk in chunks:
         chunk.unlink()
         chunk.with_suffix('.sha256').unlink()

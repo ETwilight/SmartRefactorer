@@ -1,4 +1,6 @@
-"""Shared primitive catalogue for every external controller."""
+"""Declare primitive names, execution sides, and effects for public actions and read
+services.
+"""
 
 KNOWLEDGE_METHODS = frozenset(
     {
@@ -117,6 +119,8 @@ TOOLS.update(
 
 
 def action_sides(method):
+    """Return the execution sides assigned to a primitive by its published name."""
+
     if method in LOCAL_DIAGNOSTICS:
         return ['local']
     if method.startswith(('wiki.', 'source.', 'trace.')):
@@ -143,7 +147,7 @@ def action_sides(method):
     return ['client']
 
 
-# Discovery/knowledge service names retain their existing public membership.
+# Public read-service operations use protocol op names rather than primitive method names.
 READ_SERVICES = frozenset(
     (
         'environment.describe',
@@ -175,7 +179,9 @@ _READ_ONLY_ACTIONS = frozenset(
 
 
 def action_effect(method):
-    """Published primitive effect; unknown names are always conservative."""
+    """Return a published primitive's read_only or mutation effect, classifying unknown names
+    as mutation.
+    """
     if method not in TOOLS:
         return 'mutation'
     return (
@@ -190,10 +196,8 @@ def action_effect(method):
 
 
 def request_effect(request):
-    """Classify safety, never grant permission or validate action parameters.
-
-    Disabled client actions and unknown/malformed names cannot acquire a read-only
-    retry permission merely by looking like a published observation method.
+    """Classify known enabled requests from operation, primitive, and execution-side
+    metadata; otherwise return mutation.
     """
     if not isinstance(request, dict):
         return 'mutation'

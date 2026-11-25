@@ -15,21 +15,36 @@ import java.nio.file.*;
 import java.util.*;
 import static research.agent.RpcServer.*;
 
-/** Version-specific Java mod API calls, never world paste or arbitrary reflection. */
+/**
+ * Expose the installed Litematica projection and selected mod configuration APIs.
+ *
+ * Loaded schematics and placements receive session-local IDs. Placement operations
+ * update the rendered schematic projection; comparisons sample it against the
+ * client world. Files resolve beneath Litematica's active schematic directory.
+ * Boolean mod settings are selected through the fixed CONFIGS class/field map.
+ *
+ * <pre>{@code
+ * JsonElement files = ModAdapter.schematic("schematic.list", new JsonObject(), mc);
+ * }</pre>
+ * This lists schematic filenames from the active client instance.
+ */
 public final class ModAdapter {
     private static final Map<String,LitematicaSchematic> schematics=new HashMap<>();
     private static final Map<String,SchematicPlacement> placements=new HashMap<>();
+    /** Create and return the active Litematica schematic directory. */
     private static Path directory() {
-        // Match the active Litematica instance, including HMCL version isolation.
+        // Litematica supplies the directory for the active client instance.
         Path root=DataManager.getSchematicsBaseDirectory().toAbsolutePath().normalize();
         try {Files.createDirectories(root);}catch(Exception e){throw new RuntimeException(e);}return root;
     }
+    /** Resolve a .litematic filename beneath the active schematic directory. */
     private static Path file(String filename) {
         Path root=directory(),path=root.resolve(filename).normalize();
         if(!path.startsWith(root)||!path.getFileName().toString().endsWith(".litematic"))throw new SecurityException("Invalid schematic path");
         try {if(Files.exists(path)&&!path.toRealPath().startsWith(root.toRealPath()))throw new SecurityException("Schematic symlink outside root");}
         catch(java.io.IOException e){throw new RuntimeException(e);}return path;
     }
+    /** Dispatch schematic loading, placement, comparison, material, or save requests. */
     public static JsonElement schematic(String method,JsonObject p,Minecraft mc) {
         switch(method) {
             case "schematic.list":
@@ -77,6 +92,7 @@ public final class ModAdapter {
                     if(rangeMin!=null){x0=Math.max(x0,rangeMin.getX());y0=Math.max(y0,rangeMin.getY());z0=Math.max(z0,rangeMin.getZ());x1=Math.min(x1,rangeMax.getX());y1=Math.min(y1,rangeMax.getY());z1=Math.min(z1,rangeMax.getZ());}
                     if(x0>x1||y0>y1||z0>z1)continue;
                     for(var mutable:BlockPos.betweenClosed(x0,y0,z0,x1,y1,z1)) {
+                        // The iterator reuses mutable positions; retain an immutable key for overlap deduplication.
                         BlockPos pos=mutable.immutable();if(!seen.add(pos))continue;
                         if(seen.size()>32768)throw new IllegalArgumentException("Diff exceeds bounded 32768 block limit");
                         if(!mc.level.hasChunkAt(pos)||!schematicWorld.hasChunkAt(pos)){unloaded++;continue;}
@@ -99,6 +115,7 @@ public final class ModAdapter {
             default:throw new UnsupportedOperationException(method);
         }
     }
+    /** Resolve a session-local placement ID. */
     private static SchematicPlacement placement(JsonObject p){var placement=placements.get(str(p,"placement_id"));if(placement==null)throw new IllegalArgumentException("Unknown placement");return placement;}
     private static final Map<String,String[]> CONFIGS=Map.of(
         "litematica.easy_place",new String[]{"fi.dy.masa.litematica.config.Configs$Generic","EASY_PLACE_MODE"},
@@ -107,9 +124,11 @@ public final class ModAdapter {
         "tweakeroo.fast_left_click",new String[]{"fi.dy.masa.tweakeroo.config.FeatureToggle","TWEAK_FAST_LEFT_CLICK"},
         "minihud.render",new String[]{"fi.dy.masa.minihud.config.Configs$Generic","MAIN_RENDERING_TOGGLE"}
     );
+    /** Read or update one boolean setting named in the fixed configuration map. */
     public static JsonElement config(String method,JsonObject p){
         String key=str(p,"key");var spec=CONFIGS.get(key);if(spec==null)throw new SecurityException("Mod setting not whitelisted");
         try {
+            // spec is a fixed (class name, static field name) pair for the selected mod setting.
             Object config=Class.forName(spec[0]).getField(spec[1]).get(null);
             if(method.endsWith("set"))config.getClass().getMethod("setBooleanValue",boolean.class).invoke(config,p.get("enabled").getAsBoolean());
             Object value=config.getClass().getMethod("getBooleanValue").invoke(config);

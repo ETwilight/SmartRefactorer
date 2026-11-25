@@ -1,4 +1,6 @@
-"""Agent-facing server resource facts and recovery guidance, not agent budgets."""
+"""Present configured server resources, evaluation-region limits, and environment operating
+guidance.
+"""
 
 if __package__:
     from .server_recovery import binding
@@ -7,6 +9,10 @@ else:
 
 
 def describe(environment):
+    """Return current server-resource metadata, evaluation limits, health-query instructions,
+    and public guidance.
+    """
+
     try:
         state = binding(environment)
         metadata_status = 'managed_configuration' if state else 'unmanaged_or_unavailable'
@@ -15,7 +21,10 @@ def describe(environment):
         metadata_status = 'unavailable:' + type(exc).__name__
     heap = state.get('heap_mb')
     processors = state.get('processors')
+    # heap becomes a positive int in MiB or None when the configured value is unavailable.
     heap = heap if type(heap) is int and heap > 0 else None
+    # processors becomes a positive int or None; it describes the JVM ActiveProcessorCount
+    # setting.
     processors = processors if type(processors) is int and processors > 0 else None
     return {
         'scope': 'Minecraft server resources; research-agent processes and model budgets are owned by their experiment hosts',

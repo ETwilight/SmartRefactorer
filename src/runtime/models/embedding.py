@@ -1,9 +1,4 @@
-"""Metered local dense embedding transport shared by independent methods.
-
-Extracted from the existing generic BGE utility, not from its algorithm. Model
-identity, float32 CLS pooling, actual token counts and durable usage are retained.
-No component graph, learning, retrieval policy or implicit download is imported.
-"""
+"""Run local dense embeddings with per-run caching and recorded token usage."""
 
 from pathlib import Path
 import hashlib
@@ -15,6 +10,8 @@ from audit.control import RunStopped
 
 
 def digest(value):
+    """Hash a value's sorted, compact JSON representation."""
+
     return hashlib.sha256(
         json.dumps(
             value, sort_keys=True, ensure_ascii=False, separators=(',', ':'), allow_nan=False
@@ -23,7 +20,22 @@ def digest(value):
 
 
 class MeteredDense:
-    """Injected dense backend; cache is per run and keyed by revision+exact text."""
+    """Cache normalized dense vectors and account for each local inference batch.
+
+    backend accepts list[str] and returns one numeric vector per input.
+    token_count counts one input before inference; guard checks the run's stop
+    conditions. recorder reserves and records usage. identity describes the
+    model files and settings and is part of every cache key. cache maps these
+    keys to list[float] vectors. lock serializes cache updates and inference;
+    dimensions is fixed explicitly or learned from the first successful batch.
+
+    Example:
+        encoder = local_bge(recorder, model_path, revision, guard, lock)
+        vectors = encoder.embed(['task description'], scope='retrieve')
+
+    vectors contains a unit-length dense vector for the description. Repeating
+    the same input on this encoder uses the cached vector and records the hit.
+    """
 
     def __init__(
         self,
@@ -36,17 +48,23 @@ class MeteredDense:
         dimensions=None,
         max_length=8192,
     ):
+        """Bind the backend, usage recorder, cache lock, and input limits."""
+
         self.recorder, self.identity = recorder, identity
         self.backend, self.token_count, self.guard = backend, token_count, guard
         self.lock, self.cache = lock or threading.RLock(), {}
         self.dimensions, self.max_length = dimensions, max_length
 
     def embed(self, texts, scope):
+        """Embed uncached texts, record usage, and return normalized vectors in input order."""
+
         if any(not isinstance(t, str) for t in texts):
             raise ValueError('Embedding inputs must be strings')
         with self.lock:
             self.guard()
             keys = [digest([self.identity, text]) for text in texts]
+            # pending: dict[str, str], deduplicating uncached texts by their identity-and-text
+            # hash.
             pending = {}
             for key, text in zip(keys, texts):
                 if key not in self.cache:
@@ -75,8 +93,8 @@ class MeteredDense:
                     vectors = [
                         list(map(float, v)) for v in self.backend(list(pending.values()))
                     ]
-                    # Local inference completed: input count is known even if the
-                    # backend output turns out invalid. Record it before validation.
+                    # Record completed inference before checking the returned vector shapes.
+                    # The input token count is known even when a returned vector is invalid.
                     self.recorder.after_model(
                         call,
                         {
@@ -104,6 +122,8 @@ class MeteredDense:
                             raise ValueError('Zero dense vector')
                         vector[:] = [x / norm for x in vector]
                     self.dimensions = dimensions
+                    # vectors: list[list[float]], normalized in place and matched to pending
+                    # insertion order.
                     self.cache.update(zip(pending, vectors))
                 except BaseException as exc:
                     if '_started' in call:
@@ -131,10 +151,11 @@ class MeteredDense:
 def local_bge(
     recorder, model_path, revision, guard, lock, *, device='cpu', precision='float32'
 ):
-    """Dense CLS pooling with HF local_files_only, per BAAI BGE-M3 model card.
+    """Load local BGE-M3 weights and return a metered CLS-pooling encoder.
 
-    Optional torch/transformers dependencies are loaded only on explicit live use.
-    This backend is not exercised by fixed-vector offline tests.
+    Hash the model files into its identity. Use float32 on CPU, or the requested
+    precision on cuda:0. Each batch has at most eight inputs; token counts include
+    special tokens and inputs exceeding the encoder limit are rejected.
     """
     root = Path(model_path).resolve()
     if not root.is_dir() or not revision:
@@ -181,8 +202,8 @@ def local_bge(
     dtype = torch.float32 if precision == 'float32' else torch.float16
     load_options = {}
     if device.startswith('cuda'):
-        # Place parameters directly on the configured GPU through meta loading;
-        # do not first materialize a second full float32 model in host RAM.
+        # Load parameters directly onto the selected GPU to reduce peak host memory.
+
         load_options = {
             'device_map': device,
             'low_cpu_mem_usage': True,
@@ -207,16 +228,23 @@ def local_bge(
         raise ValueError('Expected the BGE-M3 XLM-RoBERTa dense model (1024 dims)')
 
     def count(text):
+        """Count tokenizer tokens, including special tokens, without truncation."""
+
         return len(tokenizer.encode(text, add_special_tokens=True, truncation=False))
 
     def encode(texts):
+        """Encode batches and return float32, unit-length CLS vectors as Python lists."""
+
         values = []
         for offset in range(0, len(texts), 8):
             batch = tokenizer(
                 texts[offset : offset + 8], padding=True, truncation=False, return_tensors='pt'
             )
+            # batch changes from a tokenizer BatchEncoding to a dict[str, Tensor] on the
+            # selected device.
             batch = {name: tensor.to(device) for name, tensor in batch.items()}
             with torch.inference_mode():
+                # vectors: Tensor[batch_size, 1024], selecting the CLS token from each sequence.
                 vectors = model(**batch).last_hidden_state[:, 0]
                 values.extend(
                     torch.nn.functional.normalize(vectors.float(), p=2, dim=1).cpu().tolist()

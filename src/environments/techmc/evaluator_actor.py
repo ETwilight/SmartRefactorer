@@ -1,11 +1,38 @@
-"""Observe required evaluator actors; never protect, move, heal or respawn them."""
+"""Track the evaluator player's position, game mode, and lifecycle throughout acceptance."""
 
 import math
 import time
 
 
 class EvaluatorActor:
+    """Check continuity of the task's required operating player.
+
+    call accepts a server method and parameters and returns its unwrapped result.
+    name, position, and dimension identify the expected actor and operating site.
+    baseline and latest are dict | None, referencing the first verified status
+    and most recent readback. samples counts successful status-query returns;
+    last_sample is a monotonic timestamp used by the optional sampling throttle.
+
+    status begins as inconclusive. sample() checks connected/alive flags,
+    Survival mode, fake-player identity, position, and stable UUID/death/connection
+    counters. An observed violation sets fail and raises ValueError. Missing
+    telemetry or a read error sets inconclusive and raises RuntimeError. start()
+    also checks the loaded site's collision geometry and support/fluid/flying
+    condition. summary() returns the recorded status and initial/final readbacks.
+
+    Example:
+        actor = EvaluatorActor(call, name, position, dimension)
+        actor.start()
+        actor.sample()
+        result = actor.summary()
+
+    result reports actor continuity across the sampled measurement interval.
+    The evaluator uses this status as one of its acceptance checks.
+    """
+
     def __init__(self, call, name, position, dimension):
+        """Bind the status-query callback and expected actor/site, with no initial samples."""
+
         self.call = call
         self.name = name
         self.position = position
@@ -18,11 +45,17 @@ class EvaluatorActor:
         self.last_sample = 0
 
     def fail(self, message):
+        """Record an observed actor violation and raise ValueError with its message."""
+
         self.status = 'fail'
         self.message = message
         raise ValueError(message)
 
     def sample(self, force=True):
+        """Read and check actor continuity, allowing a 50 ms sampling skip when force is
+        false.
+        """
+
         if not force and time.monotonic() - self.last_sample < 0.05:
             return
         try:
@@ -64,6 +97,8 @@ class EvaluatorActor:
             if self.baseline is not None and state[key] != self.baseline[key]:
                 self.fail('Evaluator actor lifecycle changed during acceptance: ' + key)
         if self.baseline is None:
+            # baseline changes from None to the first verified status dict, retained for later
+            # lifecycle comparisons.
             self.baseline = state
         self.status = 'pass'
         self.message = (
@@ -72,6 +107,10 @@ class EvaluatorActor:
         return state
 
     def start(self):
+        """Take the initial actor sample and check the declared operating site's loading and
+        geometry.
+        """
+
         self.sample()
         site = self.call(
             'observe.afk_site', {'position': self.position, 'dimension': self.dimension}
@@ -92,6 +131,10 @@ class EvaluatorActor:
             )
 
     def summary(self):
+        """Return continuity status, sample count, and the initial and latest actor
+        readbacks.
+        """
+
         return {
             'status': self.status,
             'message': self.message,

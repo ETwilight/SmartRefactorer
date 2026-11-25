@@ -1,14 +1,16 @@
-"""Read canonical feedback without confusing execution with business success.
+"""Read execution state, retry information, and status from public feedback.
 
-The caller obtains the full, payload-bound receipt from its environment port.
-These functions neither establish that provenance nor rewrite the receipt.
-Read-only authority is provider metadata, never a method-name heuristic.
+_check validates the raw feedback mapping and its request identity. These
+helpers then select execution fields or the status fallback used by older
+feedback records. Read-only classification comes from tool effect metadata.
 """
 
 from collections.abc import Mapping
 
 
 def _check(feedback, request=None):
+    """Validate a feedback mapping and return its execution metadata."""
+
     if not isinstance(feedback, Mapping):
         raise ValueError('Canonical feedback must be an object')
     if feedback.get('feedback_ref') or feedback.get('response_view'):
@@ -32,38 +34,44 @@ def _check(feedback, request=None):
 
 
 def execution_state(feedback, *, request=None):
-    """Return only the explicitly published execution state, otherwise None."""
+    """Return the published execution state, or None when it is absent."""
     return _check(feedback, request).get('state')
 
 
 def is_uncertain(feedback, *, request=None):
+    """Return whether execution or feedback status reports unknown or running work."""
+
     state = execution_state(feedback, request=request)
     if state is not None:
         return state in ('unknown', 'running')
-    # Compatibility with older ports which did not publish execution metadata.
+    # Use the status field when the record has no execution metadata.
     return feedback.get('status') in ('pending_or_unknown', 'running')
 
 
 def is_terminal(feedback, *, request=None):
+    """Return whether execution metadata names completed or not_started."""
+
     return execution_state(feedback, request=request) in ('completed', 'not_started')
 
 
 def is_running(feedback, *, request=None):
-    """Known asynchronous work uses status polling, not unknown recovery."""
+    """Return whether execution metadata or feedback status reports running work."""
     state = execution_state(feedback, request=request)
     return state == 'running' if state is not None else feedback.get('status') == 'running'
 
 
 def retry_directive(feedback, *, request=None):
-    """Read the producer's retry decision; do not invent permission to resend."""
+    """Return the retry directive stored in the execution metadata."""
     return _check(feedback, request).get('retry')
 
 
 def operation_succeeded(feedback, *, request=None):
-    """Operation success is not independent evaluation or task acceptance."""
+    """Return whether the request feedback status is completed."""
     _check(feedback, request)
     return feedback.get('status') == 'completed'
 
 
 def is_read_only(metadata):
+    """Return whether tool metadata declares effect=read_only."""
+
     return isinstance(metadata, Mapping) and metadata.get('effect') == 'read_only'

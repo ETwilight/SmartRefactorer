@@ -4,8 +4,20 @@ import java.util.*;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
 
-/** Registry identities needed by component-sensitive product acceptance. */
+/**
+ * Read component identities used by component-sensitive item accounting.
+ *
+ * The returned map includes registered instruments, potion identity and custom-effect
+ * count, ominous-bottle amplifier, and applied or stored enchantment levels when
+ * present. Keys use registry IDs and values retain their component-specific shape.
+ *
+ * <pre>{@code
+ * Map<String, Object> components = ItemComponents.read(stack);
+ * }</pre>
+ * The evaluator attaches this map to slot and aggregate item observations.
+ */
 public final class ItemComponents {
+    /** Read supported component identities and levels from the supplied stack. */
     public static Map<String,Object> read(ItemStack stack) {
         Map<String,Object> value=new TreeMap<>();
         var instrument=stack.get(DataComponents.INSTRUMENT);
@@ -18,6 +30,7 @@ public final class ItemComponents {
             contents.put("custom_effect_count",potion.customEffects().size());
             value.put("minecraft:potion_contents",contents);
         }
+        // Applied and stored enchantments have separate component keys but share the level-map shape.
         for(boolean stored:List.of(false,true)) {
             var ench=stored?stack.get(DataComponents.STORED_ENCHANTMENTS):stack.get(DataComponents.ENCHANTMENTS);
             if(ench!=null&&!ench.isEmpty()) {

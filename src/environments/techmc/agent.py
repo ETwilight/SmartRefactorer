@@ -1,4 +1,4 @@
-"""Convenience CLI over the standard environment protocol; no policy or skills."""
+"""Send a public TechMC operation or action from the command line."""
 
 from pathlib import Path as _BootstrapPath
 import sys as _BootstrapSys
@@ -28,6 +28,8 @@ else:
 
 
 def main():
+    """Parse the request, call Environment.handle, and print the protocol response."""
+
     p = argparse.ArgumentParser()
     p.add_argument('method')
     p.add_argument('--params', default='{}')
@@ -48,14 +50,16 @@ def main():
         client_port=a.client_port,
         task_selection=selection_from_args(a),
     )
+    # Decode the command-line JSON string to the request parameter value.
     params = json.loads(a.params)
-    # Dispatch public protocol operations from the authoritative contract. This
-    # does not change their permissions or game requirements in Environment.
+    # Classify protocol operations through the shared operation contract.
+    # Environment.handle applies the operation permissions and game requirements.
     service_ops = OP_PARAMS
     if a.method in service_ops:
         op = a.method
     else:
         op = 'action.execute'
+        # Wrap action parameters in the action.execute payload shape.
         params = {
             'action': {
                 'method': a.method,

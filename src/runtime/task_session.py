@@ -1,7 +1,5 @@
-"""任务宿主循环：交付当前任务、调用策略、执行请求、归档回执与推进轮次。
-
-SessionRunner 连接策略回调、环境端口、预算账本与 continuation service；
-方法 adapter 提供算法状态和恢复记录的解释方式。
+"""Run method-adapter policies through task episodes with persistent state and explicit
+continuation.
 """
 
 import argparse
@@ -42,10 +40,24 @@ DECISION = obj(
 
 
 class _TaskWorkspaceReleaseError(RuntimeError):
+    """End task processing when releasing the current workspace fails.
+
+    The message retains the release error; close_round() records its details in
+    the round before raising this internal exception. run() catches it and enters
+    finalization with the recorded failure status.
+
+    Example, inside the workspace-release exception handler:
+        raise _TaskWorkspaceReleaseError(str(exc)) from exc
+
+    This leaves the task stream at the current task while the run is finalized.
+    """
+
     pass
 
 
 def task_index(feedback):
+    """Wrap a successful task catalogue as an index with a tasks.get details operation."""
+
     if not operation_succeeded(feedback):
         return feedback
     return {
@@ -59,6 +71,36 @@ def task_index(feedback):
 
 
 class SessionRunner:
+    """Run a method adapter through task episodes and environment feedback.
+
+    environment is a ManagedEnvironment closed during finalization.
+    policy supplies decide(context) and may provide persistence,
+    request-stream, feedback, round-end, and summary hooks. Policies
+    with programmatic_continuation can advance their local execution
+    state between model calls. Requests and model calls share one
+    RunRecorder with cumulative token limits and optional episode caps.
+
+    output_root is the Path containing run directories. compact_discovery
+    defaults to true. auditor_factory supplies a round auditor.
+    resume_from selects a stopped parent run; continuation_service loads
+    its state, restores the recorder, copies context files, and saves
+    new runner checkpoints. policy.persist() saves method-owned state
+    whenever the runner checkpoints.
+
+    Example:
+        runner = SessionRunner(
+            environment,
+            policy,
+            token_budget=token_budget,
+            workflow=workflow,
+            continuation_service=continuation_service,
+        )
+        report = runner.run(goal)
+
+    The adapter's policy decides the next requests, receives their full
+    recorded feedback, and retains its algorithm state while the runner
+    handles task episodes, usage, checkpointing, and final cleanup.
+    """
 
     def __init__(
         self,
@@ -75,6 +117,10 @@ class SessionRunner:
         resume_from=None,
         continuation_service=None,
     ):
+        """Bind the managed environment, policy, limits, reporting, and continuation
+        settings.
+        """
+
         if max_rounds is not None and (type(max_rounds) is not int or max_rounds < 1):
             raise ValueError('max_rounds must be positive or None')
         if round_token_budget is not None and round_token_budget <= 0:
@@ -100,13 +146,16 @@ class SessionRunner:
         self.continuation_service = continuation_service
 
     def run(self, goal):
-        """运行当前任务序列，交替推进策略决策、环境请求与任务验收反馈。
+        """Discover the environment, run task decisions and requests, and return the
+        finalized report.
 
-        运行记录、预算和上下文随阶段落盘；continuation service 重建方法状态。
+        Restore an explicitly selected continuation before entering the task
+        loops. Persist feedback and checkpoints as work progresses, then finish
+        the active round, close the environment, and write the report.
         """
         from runtime.layout import run_identity
 
-        # 建立本段运行身份；报告、上下文与账本共享这个运行目录。
+        # Create the segment directory shared by its report, context files, and ledger.
         run_id, folder = run_identity(self.output_root)
         recorder = RunRecorder(
             folder, run_id, self.workflow, self.token_budget, self.round_token_budget
@@ -169,12 +218,18 @@ class SessionRunner:
         save_json(folder / 'config.json', config)
         control = RunControl(folder / 'control.json', self.max_rounds)
         recorder.model_guard = lambda: control.check(recorder)
+        # context: dict passed by copy to the policy; history contains decision and feedback
+        # records.
         context = {'goal': goal, 'limits': result['limits'], 'discovery': {}, 'history': []}
+        # resume: dict | None; a loaded continuation carries reports, memory, calls, and pending
+        # requests.
         resume = None
+        # resume_pending: list[dict] of parent-segment requests not yet dispatched.
         resume_pending = []
         carried_models = 0
         carried_tokens = 0
-        # 先恢复累计用量和已完成反馈，再接续原任务中的剩余请求。
+        # Restore carried usage and received feedback before dispatching the unexecuted request
+        # tail.
         if self.resume_from is not None:
             resume = self.continuation_service.load_continuation(
                 self.resume_from, readonly=getattr(self.environment, 'readonly', None)
@@ -217,9 +272,13 @@ class SessionRunner:
                 }
             )
             config['continuation'] = copy.deepcopy(result['continuation'])
+        # evaluation_ids: set[str], deduplicating accepted evaluation reports across decisions
+        # and segments.
         evaluation_ids = set()
         boundary_ids = set()
         audit_seconds = 0
+        # active_stream: Iterator[dict] | None, retained for cleanup if request dispatch is
+        # interrupted.
         active_stream = None
         stop = False
         if resume is not None:
@@ -234,8 +293,13 @@ class SessionRunner:
         catalogue_ids = set()
         task_stream = getattr(self.environment, 'task_stream', None)
 
-        # 以下局部步骤共用本次运行状态，分别处理持久化、发现与任务轮次。
+        # These helpers share the current run state for checkpointing, discovery, and episode
+        # completion.
         def checkpoint():
+            """Persist the policy and save an active runner checkpoint through the
+            continuation service.
+            """
+
             if hasattr(self.policy, 'persist'):
                 self.policy.persist()
             if self.continuation_service is not None and recorder.round is not None:
@@ -244,6 +308,10 @@ class SessionRunner:
                 )
 
         def has_primary_failure():
+            """Check whether the result already records an error, stop notice, or budget
+            failure.
+            """
+
             return bool(
                 result.get('error')
                 or result.get('control_notice')
@@ -252,6 +320,8 @@ class SessionRunner:
             )
 
         def budget_reason():
+            """Map the recorder's exhausted limit to the corresponding run or round status."""
+
             return (
                 'accounting_blocked'
                 if recorder.budget_limit == 'accounting'
@@ -263,6 +333,10 @@ class SessionRunner:
             )
 
         def discover(ops):
+            """Execute discovery requests and update the recorded and policy-facing
+            environment views.
+            """
+
             for op in ops:
                 params = {}
                 if getattr(self.policy, 'compact_transport', False):
@@ -293,6 +367,7 @@ class SessionRunner:
                 if op == 'tasks.list':
                     tasks = feedback['result']
                     if isinstance(tasks, dict):
+                        # tasks changes from a task-index dict to its list of task definitions.
                         tasks = tasks.get('tasks', [])
                     catalogue_ids.clear()
                     catalogue_ids.update(
@@ -311,6 +386,10 @@ class SessionRunner:
             save_json(folder / 'config.json', config)
 
         def advance_task(outcome, claim=None):
+            """Advance the task stream with its outcome and persist the updated public
+            progress.
+            """
+
             current = task_stream.current_id
             task_stream.advance(outcome)
             recorder.event(
@@ -335,6 +414,10 @@ class SessionRunner:
             return task_stream.current_id is None
 
         def close_round(reason):
+            """Finish the round, call the policy hook, capture its audit, and release the
+            task workspace.
+            """
+
             nonlocal audit_seconds, stop
             record = recorder.finish_round(reason)
             if 'continuation_timing' in record:
@@ -476,14 +559,17 @@ class SessionRunner:
                 }
                 result['task_stream'] = task_stream.public_state()
                 save_json(folder / 'task_stream_progress.json', result['task_stream'])
-            # 读取环境能力、动作定义和当前可见任务，作为策略的初始上下文。
+            # Discover public interfaces, available actions, and currently visible tasks.
             discover(('environment.describe', 'actions.list', 'tasks.list'))
-            # 进入决策—执行—反馈主循环，模型用量归入同一本运行账本。
+            # Enter the task-episode loop with this recorder bound to model calls.
             with observe_model_calls(recorder):
                 stop = False
-                while (self.max_rounds is None or len(recorder.rounds) < self.max_rounds) and (
-                    not stop
-                ):
+                while not stop:
+                    if (
+                        self.max_rounds is not None
+                        and len(recorder.rounds) >= self.max_rounds
+                    ):
+                        break
                     control.check(recorder)
                     if task_stream is not None and task_stream.current_id is None:
                         result['status'] = 'task_stream_complete'
@@ -571,6 +657,8 @@ class SessionRunner:
                         if task_stream is not None:
                             context['task_stream'] = task_stream.public_state()
                         if hasattr(self.environment, 'task_workspace_status'):
+                            # state: dict containing the host's current workspace and
+                            # pending-transition fields.
                             state = self.environment.task_workspace_status()
                             active = state.get('active') or {}
                             context['task_workspace'] = {
@@ -668,8 +756,11 @@ class SessionRunner:
                             reason = 'model_finish'
                             break
                         try:
+                            # requests: decoded JSON; normalize a single dict to a list before
+                            # validating the request batch.
                             requests = json.loads(decision['request_json'])
                             if isinstance(requests, dict):
+                                # requests changes from one request dict to list[dict].
                                 requests = [requests]
                             if (
                                 not isinstance(requests, list)
@@ -688,6 +779,8 @@ class SessionRunner:
                             continue
                         if not replaying:
                             record['planned_requests'] = len(requests)
+                        # resume_pending: list[dict] of parent-segment requests not yet
+                        # dispatched.
                         resume_pending = []
                         expanded = hasattr(self.policy, 'request_stream')
                         stream = (
@@ -698,6 +791,8 @@ class SessionRunner:
                         active_stream = stream
                         for request in stream:
                             control.check(recorder)
+                            # view: dict retaining the provider-selected feedback separately
+                            # from the full recorded feedback.
                             view = {}
                             if getattr(self.policy, 'compact_transport', False) and request.get(
                                 'op'
@@ -730,6 +825,10 @@ class SessionRunner:
                                     }
 
                             def invoke(req):
+                                """Dispatch a request, retain its selected view, and return
+                                full feedback for the recorder.
+                                """
+
                                 if (
                                     task_stream is None
                                     and selected_task
@@ -835,6 +934,8 @@ class SessionRunner:
                                     or request['params']['task_id'] == task_stream.current_id
                                 )
                             ):
+                                # state is now str, the requested task-progress state such as
+                                # deferred or abandoned.
                                 state = request['params']['state']
                                 if state in ('deferred', 'abandoned'):
                                     if task_stream is not None:
@@ -845,6 +946,8 @@ class SessionRunner:
                                     reason = 'task_' + state
                             if hasattr(self.policy, 'on_feedback'):
                                 self.policy.on_feedback(request, feedback)
+                            # evaluation: a JSON value; a successful evaluation.run result is
+                            # checked against evaluation-report below.
                             evaluation = feedback.get('result')
                             if request.get('op') == 'evaluation.run' and operation_succeeded(
                                 feedback
@@ -879,6 +982,8 @@ class SessionRunner:
                                         reason = 'task_passed'
                             boundary = request.get('request_id')
                             if not isinstance(boundary, str):
+                                # boundary becomes the recorded call ID when the request has no
+                                # string request_id.
                                 boundary = call['call_id']
                             if (
                                 request.get('op') == 'evaluation.run'
@@ -904,6 +1009,8 @@ class SessionRunner:
                                 break
                         if hasattr(stream, 'close'):
                             stream.close()
+                        # active_stream: Iterator[dict] | None, retained for cleanup if request
+                        # dispatch is interrupted.
                         active_stream = None
                         if expanded:
                             record['expanded_requests'] = len(record['calls'])
@@ -932,7 +1039,7 @@ class SessionRunner:
                         if not stop:
                             control.check(recorder)
                             discover(('environment.describe', 'tasks.list'))
-            # 主循环结束后汇总轮次和最终状态，随后完成环境与报告收尾。
+            # Finalize the run status after the task loops end.
             if result['status'] == 'running':
                 result['status'] = 'round_budget_exhausted'
         except _TaskWorkspaceReleaseError:

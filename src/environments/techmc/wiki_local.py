@@ -1,6 +1,5 @@
-"""Local wikitext corpus: policy-aware API fetch, XML import, SQLite FTS search.
-
-Python standard library only. Templates/images are not expanded or downloaded.
+"""Collect raw Wiki revisions or import XML dumps into local JSON files and a SQLite
+full-text index.
 """
 
 import argparse
@@ -21,10 +20,14 @@ import xml.etree.ElementTree as ET
 
 
 def now():
+    """Return the current UTC time as an ISO 8601 string."""
+
     return datetime.now(timezone.utc).isoformat()
 
 
 def database(out):
+    """Create the corpus directory and FTS pages table, returning the SQLite connection."""
+
     out.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(out / 'index.sqlite')
     db.execute(
@@ -34,6 +37,10 @@ def database(out):
 
 
 def save(out, db, record):
+    """Write a revision JSON file, replace its title's indexed row, and return the absolute
+    JSON path.
+    """
+
     key = hashlib.sha256(record['title'].encode()).hexdigest()[:24]
     revision = str(record.get('revision_id') or 'unknown')
     path = out / 'pages' / f'{key}-{revision}.json'
@@ -51,11 +58,13 @@ def save(out, db, record):
 
 
 def get(url, agent):
+    """Fetch UTF-8 text using the supplied User-Agent and check the response's final origin."""
+
     request = urllib.request.Request(
         url, headers={'User-Agent': agent, 'Accept': 'application/json,text/plain'}
     )
     with urllib.request.urlopen(request, timeout=30) as response:
-        # Cross-origin redirects must not silently change the policy target.
+        # Check that the final response origin matches the origin whose policy was read.
         if urllib.parse.urlsplit(response.url).netloc != urllib.parse.urlsplit(url).netloc:
             raise RuntimeError(
                 'Cross-origin redirect; inspect the official endpoint before continuing'
@@ -64,7 +73,11 @@ def get(url, agent):
 
 
 def policy_allows(text, agent, url):
-    """Handle robots wildcards/$ (stdlib RobotFileParser treats them literally)."""
+    """Evaluate robots groups with wildcard/end markers, selecting the most-specific agent
+    and longest matching path rule.
+    """
+    # groups stores (agent-name list, rule list) pairs; agents and rules accumulate the current
+    # robots group.
     groups, agents, rules = [], [], []
     for raw in text.splitlines() + ['User-agent: __end__']:
         line = raw.split('#', 1)[0].strip()
@@ -112,10 +125,15 @@ def policy_allows(text, agent, url):
             )
             if re.search(regex, target):
                 applicable.append((len(body.replace('*', '')), key == 'allow'))
+    # Tuple ordering chooses the longest literal match, with Allow winning equal-length ties.
     return max(applicable, default=(0, True))[1]
 
 
 def fetch(args):
+    """Fetch seeded page revisions under the retrieved robots rules and record their raw
+    text, provenance, and acquisition status.
+    """
+
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     api = args.api
@@ -230,6 +248,10 @@ def fetch(args):
 
 
 def import_xml(args):
+    """Stream a plain, gzip, or bzip2 XML dump and save each page's newest revision in the
+    local corpus.
+    """
+
     out = Path(args.out)
     db = database(out)
     source = Path(args.file)
@@ -246,10 +268,14 @@ def import_xml(args):
                     continue
 
                 def read(parent, name):
+                    """Read text from an immediate XML child by local name, returning an
+                    empty string when absent.
+                    """
+
                     child = parent.find('{*}' + name)
                     return child.text if child is not None and child.text else ''
 
-                # A history dump may have many revisions; retain the newest timestamp.
+                # Select the newest timestamp when a page contains multiple revision elements.
                 revisions = element.findall('{*}revision')
                 if revisions:
                     revision = max(revisions, key=lambda r: read(r, 'timestamp'))
@@ -277,6 +303,8 @@ def import_xml(args):
                     }
                     save(out, db, record)
                     count += 1
+                # Release parsed page children after saving their records to keep XML import
+                # memory bounded.
                 root.clear()
         print(f'Imported {count} pages; raw wikitext, templates not expanded')
     finally:
@@ -284,6 +312,10 @@ def import_xml(args):
 
 
 def main():
+    """Dispatch corpus fetch/import commands or print full-text search results from the
+    selected index.
+    """
+
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     fetcher = commands.add_parser('fetch')

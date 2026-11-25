@@ -7,13 +7,28 @@ import net.minecraft.world.level.gamerules.*;
 import net.minecraft.world.effect.MobEffectInstance;
 import java.util.*;
 
-/** Captures only temporary environment categories actually changed by this run.
- * Structure edits, inventory preparation, deaths and spawns are deliberately not rolled back.
+/**
+ * Capture and restore temporary environment settings changed by a run.
+ *
+ * Each run maps a setting category to the undo action captured at its first
+ * mutation. Restoration visits categories in reverse capture order and reports
+ * errors per category. Categories listed in keep retain their current values.
+ * World construction, inventories, deaths, and spawned entities persist separately.
+ *
+ * <pre>{@code
+ * EnvironmentGuard guard = new EnvironmentGuard(server);
+ * guard.before(runId, "tick freeze");
+ * server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "tick freeze");
+ * Map<String, Object> restored = guard.restore(runId, Set.of());
+ * }</pre>
+ * The saved tick settings are restored when the run releases its temporary conditions.
  */
 public final class EnvironmentGuard {
     private final MinecraftServer server;
     private final Map<String,LinkedHashMap<String,Runnable>> runs=new HashMap<>();
+    /** Bind temporary-setting capture to this Minecraft server. */
     public EnvironmentGuard(MinecraftServer server){this.server=server;}
+    /** Capture the first mutation of a temporary setting category for the run. */
     public void before(String run,String command){
         List<String> words=CommandPolicy.tokens(command);int start=0;
         for(int i=0;i<words.size();i++)if(words.get(i).equals("run"))start=i+1;
@@ -21,6 +36,7 @@ public final class EnvironmentGuard {
         if(!Set.of("tick","time","weather","gamerule","forceload","effect","difficulty","gamemode").contains(root))return;
         List<String> tail=words.subList(start,words.size());
         if((root.equals("gamerule")&&tail.size()<3)||(root.equals("difficulty")&&tail.size()==1)||((root.equals("time")||root.equals("forceload")||root.equals("tick"))&&tail.contains("query")))return;
+        // The first mutation owns the baseline value for each category in this run.
         var guards=runs.computeIfAbsent(run,k->new LinkedHashMap<>());
         if(guards.containsKey(root))return;
         Runnable undo=switch(root){
@@ -38,6 +54,7 @@ public final class EnvironmentGuard {
                 yield ()->initial.forEach((level,chunks)->{Set<Long> current=new HashSet<>(level.getForceLoadedChunks());for(long packed:current)if(!chunks.contains(packed))level.setChunkForced(ChunkPos.getX(packed),ChunkPos.getZ(packed),false);for(long packed:chunks)if(!current.contains(packed))level.setChunkForced(ChunkPos.getX(packed),ChunkPos.getZ(packed),true);});
             }
             case "gamerule"->{
+                // Each Object value retains the runtime type belonging to its GameRule key.
                 Map<ServerLevel,Map<GameRule<?>,Object>> initial=new LinkedHashMap<>();
                 for(var level:server.getAllLevels()){
                     Map<GameRule<?>,Object> rules=new LinkedHashMap<>();level.getGameRules().visitGameRuleTypes(new GameRuleTypeVisitor(){public <T>void visit(GameRule<T> rule){rules.put(rule,level.getGameRules().get(rule));}});initial.put(level,rules);
@@ -57,10 +74,13 @@ public final class EnvironmentGuard {
         };
         guards.put(root,undo);
     }
+    /** Restore a gamerule value using the type paired with its captured rule key. */
     @SuppressWarnings("unchecked")private <T>void restoreRule(GameRules rules,GameRule<T> rule,Object value){rules.set(rule,(T)value,server);}
+    /** Remove the run snapshot and execute its selected undo actions in reverse order. */
     public Map<String,Object> restore(String run,Set<String> keep){
         var guards=runs.remove(run);if(guards==null)return Map.of("restored",List.of(),"errors",List.of());
         List<String> restored=new ArrayList<>(),errors=new ArrayList<>();
+        // Reverse insertion order unwinds the most recently captured category first.
         List<String> categories=new ArrayList<>(guards.keySet());Collections.reverse(categories);
         for(String category:categories)if(!keep.contains(category))try{guards.get(category).run();restored.add(category);}catch(Exception error){errors.add(category+": "+error);}
         return Map.of("restored",restored,"kept",keep,"errors",errors,"scope","temporary environment; effect restoration covers online players at first mutation");

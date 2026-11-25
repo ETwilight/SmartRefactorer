@@ -1,7 +1,8 @@
-"""Owner-authorized retirement of one legacy, provably passive wait.
+"""Authenticate continuation after one recorded passive wait ended with an unknown result.
 
-The original unknown response remains unknown. This grants only a new decision
-after the preserved execution prefix; it never replays that prefix or the wait.
+The receipt binds the original request, execution prefix, task-world visit,
+and cumulative budget. Approval permits the next native decision; the original
+request keeps its recorded unknown result.
 """
 
 import ast
@@ -31,6 +32,8 @@ APPROVAL_SCHEMA = 'workflow.resume_recovery_approval.v1'
 
 
 def canonical_hash(value):
+    """Hash canonical evidence JSON with finite numeric values."""
+
     return hashlib.sha256(
         json.dumps(
             value, sort_keys=True, separators=(',', ':'), ensure_ascii=False, allow_nan=False
@@ -39,16 +42,22 @@ def canonical_hash(value):
 
 
 def _sha(path):
+    """Return a file's SHA256 content hash."""
+
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _safe_id(value):
+    """Validate and return a checkpoint identity used in retained paths."""
+
     if not isinstance(value, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', value):
         raise ValueError('Invalid checkpoint identity')
     return value
 
 
 def _call_name(node):
+    """Extract a direct or one-level attribute call name from an AST node."""
+
     if isinstance(node, ast.Name):
         return node.id
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
@@ -57,7 +66,12 @@ def _call_name(node):
 
 
 def prove_passive_wait_source(path, expected_sha256):
-    """Inspect the archived implementation without importing/executing it."""
+    """Check the archived wait and dispatch AST against passive-call constraints.
+
+    Match the recorded source hash, inspect permitted calls and bindings, and
+    verify the wait's cancellation default and owned server argument. Return the
+    source hash and clock-query proof metadata.
+    """
     if _sha(path) != expected_sha256:
         raise ValueError('Archived wait source does not match its source manifest')
     tree = ast.parse(Path(path).read_text(encoding='utf-8'))
@@ -132,7 +146,7 @@ def prove_passive_wait_source(path, expected_sha256):
                 or node.keywords
             ):
                 raise ValueError('Wait contains a non-clock-read RPC')
-    # The generated request cannot supply a custom cancellation callback.
+    # Check the saved wait's zero-argument cancellation default.
     arguments = [argument.arg for argument in function.args.args]
     defaults = dict(
         zip(arguments[len(arguments) - len(function.args.defaults) :], function.args.defaults)
@@ -199,12 +213,16 @@ def prove_passive_wait_source(path, expected_sha256):
 
 
 def _unresolved(response):
+    """Identify a retained response with unknown or running execution state."""
+
     return response.get('execution', {}).get('state') in ('unknown', 'running') or response.get(
         'status'
     ) in ('pending_or_unknown', 'running')
 
 
 def _legacy_knowledge_error(entry):
+    """Recognize recorded knowledge errors whose retry policy permits a new read."""
+
     request = entry.get('request', {})
     response = entry.get('response', {})
     if (
@@ -232,6 +250,14 @@ def _legacy_knowledge_error(entry):
 
 
 def _collect(source, root):
+    """Collect the stopped run's passive-wait evidence and exact continuation binding.
+
+    Reconcile accounting, archived session files, the unique wait request, host
+    shutdown, and task-world identity. Match its terminated local invocation,
+    archived source proof, and preserved execution prefix. Return their hashes,
+    original limits, and the next-decision approval fields.
+    """
+
     source = Path(source)
     if not source.is_absolute():
         raise ValueError('Recovery source must be an absolute run directory')
@@ -259,6 +285,7 @@ def _collect(source, root):
         raise ValueError('Recovery cannot renew or bypass uncertain paid accounting')
     archived = source / 'environment/session'
     ledger = _read_json_retry(archived / 'api-ledger.json')
+    # Track legacy knowledge errors separately from the single unresolved passive wait.
     unknown = []
     knowledge = []
     for request_id, entry in ledger.items():
@@ -413,6 +440,7 @@ def _collect(source, root):
         raise ValueError('Original wait public trace is not a unique matching completed call')
     invocations = {}
     closed = []
+    # Map invocation IDs to methods until matching invocation.end events close them.
     outstanding = {}
     with (archived / 'trace.jsonl').open(encoding='utf-8') as trace:
         for line in trace:
@@ -451,6 +479,7 @@ def _collect(source, root):
         archive_source = source / 'environment-source/runtime_support.py'
         expected = source_manifest['research/techmc_env/runtime_support.py']
     source_proof = prove_passive_wait_source(archive_source, expected)
+    # Collect execution artifacts containing the exact original wait feedback.
     prefixes = []
     for artifact in sorted((source / 'method/artifacts').glob('execution-*')):
         path = artifact / 'events.json'
@@ -518,6 +547,8 @@ def _collect(source, root):
 
 
 def _physical(evidence, root, token, owner):
+    """Read retained-world and current-state proof from the selected local or remote host."""
+
     manager = evidence['manager']
     port = manager['port']
     remote = for_port(port, root)
@@ -553,6 +584,8 @@ def _physical(evidence, root, token, owner):
 
 
 def _owner(evidence, root):
+    """Read the original experiment's owner token and hashed identity."""
+
     experiment_id = _safe_id(evidence['experiment_id'])
     token = (
         (Path(root) / 'runtime/experiments' / experiment_id / 'owner.token')
@@ -565,7 +598,7 @@ def _owner(evidence, root):
 
 
 def _verify_saved_retained(evidence, root, token, owner, remote):
-    """A port's unrelated occupant does not change this saved world's owner."""
+    """Verify the recorded retained world's identity and confirmed clean shutdown."""
     instance_id = evidence['binding']['server_instance_id']
     if remote:
         raw = remote.execute(
@@ -600,7 +633,11 @@ def _verify_saved_retained(evidence, root, token, owner, remote):
 
 
 def _verify_current_owner(evidence, root, token, owner):
-    """Issuance is stopped-only; later verification accepts its exact new epoch."""
+    """Accept the saved checkpoint state or its matching acknowledged ready launch.
+
+    When another experiment occupies the port, verify the unchanged original
+    manager and its retained target separately.
+    """
     manager = evidence['manager']
     remote = for_port(manager['port'], root)
     current = (
@@ -625,8 +662,8 @@ def _verify_current_owner(evidence, root, token, owner):
         evidence['binding']['server_instance_id'],
         evidence['world'],
     ):
-        # A foreign port occupant is a scheduler concern, not checkpoint corruption.
-        # Once our launch changes its manager, only the exact ready branch is valid.
+        # Verify the saved target independently while another experiment
+        # occupies the port. Its original manager must still match.
         if _sha(live_manager) != evidence['provenance_hashes']['environment/host/manager.json']:
             raise ValueError(
                 'Changed original manager cannot authorize a different connected world'
@@ -660,10 +697,11 @@ def _verify_current_owner(evidence, root, token, owner):
 
 
 def issue_readonly_wait_recovery(source, receipt_path, *, root=ROOT, physical_proof=None):
-    """Sign only after the original world is already cleanly saved/stopped.
+    """Sign a new recovery receipt after checking the saved world and original evidence.
 
-    physical_proof is a trusted callable injection for offline tests, never an
-    untrusted JSON assertion. Production uses native local/remote verification.
+    Production obtains physical proof from the managed local or remote host.
+    Offline tests can supply a proof-verifier callable. Verify the newly written
+    receipt and return the provider approval.
     """
     evidence = _collect(source, root)
     token, owner = _owner(evidence, root)
@@ -703,6 +741,7 @@ def issue_readonly_wait_recovery(source, receipt_path, *, root=ROOT, physical_pr
         **evidence,
         'physical_proof': proof,
     }
+    # The signature binds the complete receipt body to the original owner credential.
     signature = hmac.new(
         token.encode(),
         json.dumps(
@@ -727,6 +766,8 @@ def issue_readonly_wait_recovery(source, receipt_path, *, root=ROOT, physical_pr
 
 
 def verify_readonly_wait_recovery(source, receipt_path, *, root=ROOT):
+    """Verify the owner-signed receipt against current evidence and return provider approval."""
+
     evidence = _collect(source, root)
     token, owner = _owner(evidence, root)
     path = Path(receipt_path).resolve()

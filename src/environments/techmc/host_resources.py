@@ -1,4 +1,6 @@
-"""OS memory telemetry and conservative admission. No external dependencies."""
+"""Sample operating-system memory and admit controller/JVM allocations against available
+memory and disk.
+"""
 
 import ctypes
 import os
@@ -8,16 +10,44 @@ import time
 
 
 class CapacityUnavailable(RuntimeError):
-    """Expected finite host admission refusal, not uncertain lifecycle state."""
+    """Report a measured memory or disk shortfall before host allocation.
+
+    The inherited RuntimeError message includes the measured admission result.
+    admission() raises this when available memory or free disk falls below the
+    requested allocation plus outstanding reservations.
+
+    Example, inside admission's capacity check:
+        raise CapacityUnavailable('Insufficient disk space: ' + str(result))
+
+    The caller receives the sampled quantities used to decline this allocation.
+    """
 
 
 MIB = 1024**2
 
 
 def memory():
+    """Return platform memory counters and available bytes constrained by Windows commit or
+    Linux cgroup-v2 headroom.
+    """
+
     if os.name == 'nt':
 
         class Status(ctypes.Structure):
+            """Represent the ctypes record filled by Windows GlobalMemoryStatusEx().
+
+            length and load use c_ulong; the remaining physical, commit, and virtual
+            counters use c_ulonglong. memory() initializes length before passing the
+            record to the Windows API and reads the resulting byte counters.
+
+            Example, inside memory() on Windows:
+                status = Status()
+                status.length = ctypes.sizeof(status)
+                ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status))
+
+            status now holds the native physical/commit availability used by admission.
+            """
+
             _fields_ = [('length', ctypes.c_ulong), ('load', ctypes.c_ulong)] + [
                 (n, ctypes.c_ulonglong)
                 for n in (
@@ -43,10 +73,11 @@ def memory():
     data = {}
     for line in Path('/proc/meminfo').read_text().splitlines():
         key, value = line.split(':', 1)
+        # Convert /proc memory values from KiB text into integer bytes.
         data[key] = int(value.split()[0]) * 1024
     available = data['MemAvailable']
     limits = {}
-    # A VM/container may expose more physical memory than its cgroup permits.
+    # Constrain available memory by the remaining allowance of each cgroup-v2 ancestor.
     groups = Path('/proc/self/cgroup').read_text().splitlines()
     for group in groups:
         if group.startswith('0::'):
@@ -79,10 +110,28 @@ def memory():
 
 
 def process_memory(pid):
+    """Read RSS, operating-system peak RSS, and available process-memory counters for the
+    supplied PID.
+    """
+
     if os.name == 'nt':
         from ctypes import wintypes
 
         class Counters(ctypes.Structure):
+            """Represent the ctypes record passed to Windows GetProcessMemoryInfo().
+
+            cb and faults use DWORD fields; the named memory counters use c_size_t.
+            process_memory() sets cb to the record size before calling the API, then
+            reads rss, peak_rss, and commit into the returned sample.
+
+            Example, with an open process handle:
+                value = Counters()
+                value.cb = ctypes.sizeof(value)
+                function(handle, ctypes.byref(value), value.cb)
+
+            value contains the native counters copied into the process-memory sample.
+            """
+
             _fields_ = [('cb', wintypes.DWORD), ('faults', wintypes.DWORD)] + [
                 (n, ctypes.c_size_t)
                 for n in (
@@ -100,6 +149,7 @@ def process_memory(pid):
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
         kernel.OpenProcess.restype = wintypes.HANDLE
         kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        # handle is a Win32 HANDLE; the configured restype preserves its pointer width.
         handle = kernel.OpenProcess(0x410, False, int(pid))
         if not handle:
             raise ProcessLookupError(pid)
@@ -121,6 +171,7 @@ def process_memory(pid):
     for line in (Path('/proc') / str(pid) / 'status').read_text().splitlines():
         key, value = line.split(':', 1)
         if key in ('VmRSS', 'VmHWM', 'VmSize', 'VmPeak'):
+            # Convert /proc memory values from KiB text into integer bytes.
             data[key] = int(value.split()[0]) * 1024
     return {
         'rss_bytes': data.get('VmRSS', 0),
@@ -131,6 +182,10 @@ def process_memory(pid):
 
 
 def admission(root, heap_mb=None, controller_mb=512):
+    """Compare sampled memory/disk with controller or JVM requirements plus outstanding
+    server reservations, returning the admission record.
+    """
+
     snapshot = memory()
     required = (heap_mb + 384 + 256) * MIB if heap_mb is not None else controller_mb * MIB
     disk = shutil.disk_usage(root).free
@@ -149,6 +204,8 @@ def admission(root, heap_mb=None, controller_mb=512):
                     rss = process_memory(reservation['pid'])['rss_bytes']
                 except (OSError, ValueError):
                     pass
+            # Reserve the allocation portion not yet represented by the server PID's measured
+            # RSS.
             reserved_memory += max(0, reservation['memory_bytes'] - rss)
             reserved_disk += reservation['disk_bytes']
         required += reserved_memory

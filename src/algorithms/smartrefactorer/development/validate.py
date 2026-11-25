@@ -1,7 +1,9 @@
-"""Validate：对候选的语法、接口、行为保持与结构目标逐项生成检查证据。
+"""Collect syntax, behavior, and structural check results for the candidate.
 
-每项证据绑定 candidate_hash。可执行检查给出 PASS 或 FAIL，缺少执行依据
-的检查保留 PENDING；这些记录决定下一步执行还是进入 Reflect。
+Changed library components need a passing preservation fixture on an input
+accepted by their old interface. New behavior uses explicit expected results or
+path assertions. Every result records the candidate hash used during the check;
+missing inputs, interactions, or supported check definitions produce PENDING.
 """
 
 import copy
@@ -14,13 +16,16 @@ from .check_contracts import diagnostics as check_diagnostics, run_python_check
 
 
 def validate(controller):
-    """Check the candidate version and leave missing executable evidence PENDING."""
+    """Run the proposal checks and return PASS, FAIL, or PENDING evidence records."""
     state = controller.state
+    # checks: list[ValidationEvidence], returned to the controller for execution or repair.
     checks = []
-    # 整个验证过程共用一个候选哈希，发布时据此关联检查与实际代码。
+    # All results from this pass refer to the same complete candidate hash.
     ch = digest(state.candidate)
 
     def add(name, status, observed):
+        """Append one check result with the candidate hash shared by this validation pass."""
+
         checks.append(
             {'id': name, 'candidate_hash': ch, 'status': status, 'observed': observed}
         )
@@ -54,8 +59,9 @@ def validate(controller):
     except (ValueError, KeyError, SyntaxError, SchemaError) as exc:
         add('syntax-and-bindings', 'FAIL', str(exc))
     fixtures = state.proposal.get('preservation_checks', [])
+    # preservation_covered: set[str] of changed library IDs with a passing old-input fixture.
     preservation_covered = set()
-    # 行为保持检查聚焦发生源码或接口变化的已提交组件。
+    # Track existing components whose source or callable metadata changed.
     changed_old = set()
     for name, old in controller.library.manifest['components'].items():
         current = state.candidate.get(name, {})
@@ -96,6 +102,8 @@ def validate(controller):
                 )
                 continue
             n = f['component_id']
+            # values: list[object], ordered as saved state, prior feedback, and invocation
+            # arguments.
             values = [f.get('state', {}), f.get('feedback'), f.get('args', {})]
             normal = state.candidate[n].get('language') == python_backend.PROFILE
             invocation = (
@@ -112,7 +120,7 @@ def validate(controller):
                 new_schema = state.candidate[n].get('interface', {}).get('args_schema', {})
                 Draft202012Validator.check_schema(old_schema)
                 Draft202012Validator.check_schema(new_schema)
-                # 旧接口接受的 fixture 输入同时用于新接口，比较覆盖原有调用域。
+                # Preservation also checks that the replacement accepts the old fixture input.
                 old_valid = Draft202012Validator(old_schema).is_valid(values[2])
                 if old_valid and (not Draft202012Validator(new_schema).is_valid(values[2])):
                     add(
@@ -132,7 +140,8 @@ def validate(controller):
                         f.get('requests', []),
                     )
                     expected = old_invocation['result']
-                    # 整次调用比较包含返回值和请求序列，两者共同表达可观测行为。
+                    # Compare both the returned value and the consumed request/feedback
+                    # sequence.
                     same = invocation == old_invocation
                 elif normal:
                     add(
@@ -175,6 +184,8 @@ def validate(controller):
                         raise ValueError('Assertion path must be JSON Pointer')
                     for token in pointer.split('/')[1:] if pointer else []:
                         token = token.replace('~1', '/').replace('~0', '~')
+                        # value: object -> selected list item or dictionary value; successive
+                        # path steps can change its type.
                         value = value[int(token)] if isinstance(value, list) else value[token]
                     observed.append(
                         {'path': pointer, 'actual': value, 'expected': assertion['equals']}

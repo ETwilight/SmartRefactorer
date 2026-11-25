@@ -1,7 +1,4 @@
-"""将原始反馈组织为模型上下文中的精确引用与分页结果。
-
-存储内容和展示内容分别维护；读取请求携带原始记录身份与范围。
-"""
+"""Track feedback omitted from model inputs rejected for exceeding the context limit."""
 
 import copy
 import hashlib
@@ -19,10 +16,14 @@ GUIDE = (
 
 
 def _fingerprint(value):
+    """Hash the canonical JSON bytes of a retained feedback value."""
+
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
 def _input_history(call, field):
+    """Extract a named history list from a recorded user message, or return None."""
+
     for message in call.get('request', {}).get('input', []):
         if not isinstance(message, dict):
             continue
@@ -30,11 +31,14 @@ def _input_history(call, field):
             continue
         content = message.get('content', [])
         if isinstance(content, str):
+            # content changes from a plain string to a list of message-part dictionaries.
             content = [{'text': content}]
         for part in content:
             if not isinstance(part, dict):
                 continue
             try:
+                # value: decoded JSON; only an object containing the requested history list is
+                # used.
                 value = decode(part['text'])
             except (ValueError, KeyError, TypeError):
                 continue
@@ -44,6 +48,8 @@ def _input_history(call, field):
 
 
 def _context_refusal(call):
+    """Recognize an HTTP 400 context_length_exceeded response from the provider."""
+
     error = call.get('error') or {}
     if not isinstance(error, dict):
         return False
@@ -69,6 +75,8 @@ def _context_refusal(call):
 
 
 def _feedback_index(feedback, evidence):
+    """Present shallow result summaries with references for reading their contents."""
+
     for field in ('items', 'results'):
         if isinstance(feedback.get(field), list):
             return {
@@ -84,8 +92,14 @@ def _feedback_index(feedback, evidence):
 
 
 def history_views(session, evidence):
-    """Keep raw history and every received result exact; mark proven failed delivery."""
+    """Build model-facing history using recorded delivery failures.
+
+    Entries with rejected feedback carry its availability index and exact stored
+    reference. The session retains the original feedback; its hash is checked
+    before constructing each replacement entry.
+    """
     history = session['history']
+    # failures: dict[str, dict], keyed by stringified history positions.
     failures = session.setdefault('delivery_failures', {})
     result = []
     for index, entry in enumerate(history):
@@ -110,10 +124,11 @@ def history_views(session, evidence):
 
 
 def recover_rejected_delivery(session, calls, scope, evidence, field='tool_history'):
-    """Use actual accepted/refused inputs to identify only undelivered results.
+    """Record newly undelivered feedback after a matching context-limit refusal.
 
-    If every result was already received, or this exact failure was already
-    handled, return false: another identical generation must not be attempted.
+    Compare the rejected input with the current history view, then use earlier
+    accepted inputs to find the delivered prefix. Store references and indexes
+    for the remaining results. Return whether any failure records were added.
     """
     relevant = [call for call in calls if call.get('scope') == scope]
     if not relevant or not _context_refusal(relevant[-1]):
@@ -122,6 +137,7 @@ def recover_rejected_delivery(session, calls, scope, evidence, field='tool_histo
     views = history_views(session, evidence)
     if _input_history(refused, field) != views:
         return False
+    # accepted: int, the length of the history prefix present in accepted model inputs.
     accepted = session.get('accepted_history_length', 0)
     for call in relevant[:-1]:
         if not call.get('response') or _context_refusal(call):
@@ -130,6 +146,7 @@ def recover_rejected_delivery(session, calls, scope, evidence, field='tool_histo
         if prior is not None and len(prior) <= len(views) and prior == views[: len(prior)]:
             accepted = max(accepted, len(prior))
     session['accepted_history_length'] = accepted
+    # failures: dict[str, dict], keyed by stringified history positions.
     failures = session.setdefault('delivery_failures', {})
     changed = False
     for index in range(accepted, len(session['history'])):

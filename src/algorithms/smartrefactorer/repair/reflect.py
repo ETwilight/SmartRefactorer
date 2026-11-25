@@ -1,12 +1,13 @@
-"""Reflect：从执行反馈、检查结果与失败记录定位需要修改的范围。
+"""Locate the changes needed after a failed check or task execution.
 
-G 记录问题和 revision_scope，L 记录相关来源。controller 根据诊断进入
-Plan、Propose 或组件 Patch，候选源码由后续阶段修改。
+Reflect receives the reuse plan, proposal, current source, validation results,
+execution record, and failure. Its issue groups choose component patches,
+proposal revision, or replanning; its locations identify the related source.
 """
 
 
 def reflect(controller, public):
-    """Diagnose observed evidence, preserving unaffected candidate work."""
+    """Request a diagnosis using the current failure and the evidence collected so far."""
     state = controller.state
     return controller.operator(
         'Reflect',

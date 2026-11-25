@@ -12,10 +12,23 @@ import net.minecraft.world.level.block.entity.CrafterBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import research.agent.CookingLedger;
 
-/** Records a craft only after vanilla selected a valid, nonempty result. */
+
 @Mixin(value=CrafterBlock.class,remap=false)
+/**
+ * Record a crafter transaction at the successful craft callback.
+ *
+ * The hook reads the selected recipe, ingredients, output, and recipe remainders
+ * before ingredient depletion. Missing recipe or block-entity data marks ledger
+ * coverage incomplete and retains the observer error.
+ *
+ * <pre>{@code
+ * Map<String, Object> sample = CookingLedger.read(level, min, max);
+ * }</pre>
+ * The sample includes cumulative automatic crafting at the observed block positions.
+ */
 public abstract class CraftingObservationMixin {
     @Inject(method="dispenseFrom",at=@At(value="INVOKE",target="Lnet/minecraft/world/level/block/entity/CrafterBlockEntity;setCraftingTicksRemaining(I)V"),require=1)
+    /** Read the completed craft recipe and pass its ingredient and output stacks to the ledger. */
     private void techmc_successful_craft(BlockState state,ServerLevel level,BlockPos pos,CallbackInfo ci) {
         try {
             if(!(level.getBlockEntity(pos) instanceof CrafterBlockEntity crafter)){CookingLedger.unavailable("Successful crafter has no block entity");return;}

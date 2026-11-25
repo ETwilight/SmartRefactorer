@@ -1,4 +1,4 @@
-"""Portable server inventory shared by deployment and read-only version checks."""
+"""Build the portable server inventory and its content hashes."""
 
 import hashlib
 import json
@@ -6,23 +6,35 @@ import re
 from pathlib import Path
 
 if __package__:
-    from .paths import ASSET_ROOT, SOURCE_ROOT
+    from .paths import ASSET_ROOT, SOURCE_ROOT, DATA_ROOT
 else:
-    ASSET_ROOT = SOURCE_ROOT = Path(__file__).resolve().parent
+    ASSET_ROOT = SOURCE_ROOT = DATA_ROOT = Path(__file__).resolve().parent
 
 
 def portable_python(name, source):
-    """Emit actual source for the independently deployed flat server layout."""
+    """Render a Python source file for the installed server layout as UTF-8 bytes.
+
+    Rewrite source-asset paths and package imports to their installed locations.
+    paths.py is generated for the flat server root.
+    """
+    if name == 'paths.py':
+        return (
+            'from pathlib import Path\n'
+            'SOURCE_ROOT = ASSET_ROOT = DATA_ROOT = Path(__file__).resolve().parent\n'
+            'RESEARCH_ROOT = SOURCE_ROOT\n'
+        ).encode('utf-8')
     text = source.read_text(encoding='utf-8')
     parent = 'parents[1]' if '/' in name else 'parent'
-    # 源码使用仓库资产根；部署文件按相同资源相对位置使用安装根。
-    # 匹配表达式中的空白，使源码换行和空格与打包路径转换分别处理。
+    # Source assets and installed assets occupy corresponding relative locations.
+    # Allow source whitespace to vary when replacing the asset-root expression.
     pattern = (
         r'Path\(__file__\)\.resolve\(\)\.parents\[[23]\]\s*/\s*'
         r'''(?P<quote>['"])assets/techmc(?P<tail>[^'"]*)(?P=quote)'''
     )
 
     def installed_path(match):
+        """Replace a matched source-asset path with its installed relative expression."""
+
         suffix = match.group('tail').lstrip('/')
         base = f'Path(__file__).resolve().{parent}'
         return base + (' / ' + repr(suffix) if suffix else '')
@@ -43,6 +55,8 @@ def portable_python(name, source):
 
 
 def sha256(source):
+    """Hash byte content directly, or stream a path's file content into SHA256."""
+
     if isinstance(source, bytes):
         return hashlib.sha256(source).hexdigest()
     digest = hashlib.sha256()
@@ -53,30 +67,48 @@ def sha256(source):
 
 
 def assets(root):
+    """Collect portable sources, server dependencies, tasks, schemas, and build assets.
+
+    Return a mapping from portable relative names to Paths or rendered bytes.
+    Check the datapack, selected mod hashes, and bridge build receipt while
+    collecting the inventory.
+    """
+
     root = Path(root)
+    # Inventory values are Path objects for files or bytes for rendered content.
     files = {}
 
-    def add(path):
-        relative = path.relative_to(root).as_posix()
-        if not path.exists() and root.resolve() == ASSET_ROOT.resolve():
-            source = SOURCE_ROOT / relative
+    def add(path, relative=None):
+        """Collect a file or directory under its portable name, rendering owned Python
+        sources.
+        """
+
+        relative = relative or path.relative_to(root).as_posix()
+        if root.resolve() == DATA_ROOT.resolve():
+            source = (
+                SOURCE_ROOT / relative if relative.endswith('.py') else ASSET_ROOT / relative
+            )
             if relative.endswith('.py') and source.is_file():
                 if source.is_symlink():
                     raise ValueError('Linked deployment source: ' + str(source))
+                # Store the deployed Python bytes so version checks hash the rendered layout.
                 files[relative] = portable_python(relative, source)
                 return
+            if not path.exists() and source.exists():
+                path = source
         if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
             raise ValueError('Linked deployment asset: ' + str(path))
         if path.is_dir():
             for child in path.iterdir():
-                add(child)
+                add(child, relative + '/' + child.name)
         elif path.is_file():
-            files[path.relative_to(root).as_posix()] = path
+            files[relative] = path
         else:
             raise FileNotFoundError(path)
 
     for name in (
         'contracts.py',
+        'paths.py',
         'task_catalog.py',
         'task_selection.py',
         'remote_host.py',
@@ -128,25 +160,28 @@ def assets(root):
             raise ValueError('Mod checksum mismatch: ' + source.name)
         add(source)
         portable.append({**mod, 'file': source.relative_to(root).as_posix()})
-    # Stable bytes on Windows and Linux; do not fingerprint host-native path rewrites.
+    # Use portable relative mod paths to produce identical bytes across hosts.
     files['runtime/mods.candidate-lock.json'] = json.dumps(
         {**lock, 'mods': portable}, indent=2
     ).encode('utf-8')
-    build_path = root / 'bridge/build/build.json'
+    build_root = ASSET_ROOT if root.resolve() == DATA_ROOT.resolve() else root
+    build_path = build_root / 'bridge/build/build.json'
     if build_path.is_file():
         build = json.loads(build_path.read_text(encoding='utf-8'))
-        if sha256(root / 'bridge/build/minecraft-agent-26.1.jar') != build['jar_sha256']:
+        if sha256(build_root / 'bridge/build/minecraft-agent-26.1.jar') != build['jar_sha256']:
             raise ValueError(
                 'Bridge JAR differs from its build receipt; rebuild before deployment'
             )
         for name, expected in build.get('sources', {}).items():
-            source = root / Path(name.replace('\\', '/'))
+            source = build_root / Path(name.replace('\\', '/'))
             if not source.is_file() or sha256(source) != expected:
                 raise ValueError('Bridge source changed since build: ' + name)
     return files
 
 
 def manifest(root, inventory=None):
+    """Map each portable inventory name to the hash of its deployed content."""
+
     return {
         name: sha256(source)
         for name, source in (inventory if inventory is not None else assets(root)).items()

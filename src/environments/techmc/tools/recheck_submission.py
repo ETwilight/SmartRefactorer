@@ -1,4 +1,4 @@
-"""Re-evaluate a recorded manifest against the same immutable task instance."""
+"""Evaluate a recorded submission again using the active TechMC environment."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -16,6 +16,8 @@ from environments.techmc.contracts import ROOT
 
 
 def main():
+    """Read the saved submission, request a new evaluation, and close the environment."""
+
     parser = argparse.ArgumentParser()
     parser.add_argument('evaluation_id')
     parser.add_argument('--mode', choices=['auto', 'deterministic', 'hybrid'], default='auto')
@@ -25,6 +27,8 @@ def main():
     evidence = json.loads(
         (ROOT / 'runs' / args.evaluation_id / 'evidence.json').read_text(encoding='utf-8')
     )
+    # The saved evidence supplies the submission; the current environment supplies its task
+    # context.
     environment = Environment('ETwilight')
     try:
         result = environment.handle(

@@ -1,4 +1,6 @@
-"""Experiment-owned task delivery. Advancement is deliberately not an agent RPC."""
+"""Order task visits, reveal arrived task definitions, and persist host-reported visit
+outcomes.
+"""
 
 import copy
 import json
@@ -12,6 +14,13 @@ else:
 
 
 def ordered_tasks(tasks, sequence='curriculum'):
+    """Order task definitions by curriculum, interleaved difficulty, or separated family
+    returns.
+
+    Family returns connect tasks through selected prerequisites and shared
+    primary products, then take one task from each family per pass.
+    """
+
     tasks = sorted(tasks, key=lambda t: t.get('curriculum', {}).get('order', 9999))
     if sequence == 'curriculum':
         return tasks
@@ -26,15 +35,21 @@ def ordered_tasks(tasks, sequence='curriculum'):
             for group in groups
             if i < len(group)
         ]
-    # Separate related production families in time to measure delayed reuse.
+    # Round-robin the related production families to separate their later visits in time.
     families = {}
+    # roots: dict[str, str], the parent links joining prerequisite- and product-related task
+    # families.
     roots = {t['id']: t['id'] for t in tasks}
 
     def root(identifier):
+        """Follow the family-parent mapping to its representative task ID."""
+
         while roots[identifier] != identifier:
             identifier = roots[identifier]
         return identifier
 
+    # products: dict[str, str], mapping each seen product to its most recently encountered task
+    # ID.
     products = {}
     for task in tasks:
         related = [x for x in task.get('curriculum', {}).get('prerequisites', []) if x in roots]
@@ -46,6 +61,8 @@ def ordered_tasks(tasks, sequence='curriculum'):
             roots[root(task['id'])] = root(identifier)
     for task in tasks:
         families.setdefault(root(task['id']), []).append(task)
+    # groups now contains production-family buckets; the earlier groups variable held difficulty
+    # buckets.
     groups = list(families.values())
     return [
         group[i]
@@ -56,7 +73,39 @@ def ordered_tasks(tasks, sequence='curriculum'):
 
 
 class TaskStream:
+    """Deliver a configured sequence of task visits and retain completed outcomes.
+
+    selection supplies copied task definitions. sequence chooses a generated
+    order; explicit task_ids supplies arrival order and permits repeated IDs.
+    _tasks is the visit queue, position is its zero-based current index, and
+    history contains one task_id/outcome record per completed visit. A deferred
+    outcome appends a copy of the current task to the end of the queue.
+
+    manifest records the original task IDs, definition hashes, and ordering
+    hash. state_path is Path | None; when present, construction restores the
+    matching manifest, position, and history, reconstructing deferred visits.
+    _lock serializes advancement. world_type identifies the selected world type
+    when it is fixed by the selection or shared by all tasks.
+
+    visible() returns unique arrived task definitions with future curriculum
+    references removed from their copied metadata. public_state() exposes the
+    current visit and completed history. The host calls advance() with a visit
+    outcome and persists that advancement before changing the in-memory state.
+
+    Example:
+        stream = TaskStream(selection, state_path=state_path)
+        task_id = stream.current_id
+        stream.advance('deferred')
+
+    task_id is the task offered by the first visit. Deferring it completes that
+    visit and queues another visit to the same task after the remaining arrivals.
+    """
+
     def __init__(self, selection, sequence='curriculum', task_ids=None, state_path=None):
+        """Build the arrival queue and restore persisted position, outcomes, and deferred
+        visits when available.
+        """
+
         tasks = selection.tasks()
         if task_ids is not None:
             if (
@@ -71,6 +120,7 @@ class TaskStream:
             tasks = ordered_tasks(tasks, sequence)
         self._tasks = tasks
         self.position = 0
+        # history: list[dict], with task_id and outcome for each completed visit.
         self.history = []
         self._lock = threading.RLock()
         self.state_path = Path(state_path) if state_path is not None else None
@@ -100,6 +150,8 @@ class TaskStream:
                     or position != len(history)
                 ):
                     raise ValueError('Invalid persisted task stream position/history')
+                # restored: list[dict], rebuilt from the original arrivals plus deferred visits
+                # found in saved history.
                 restored = copy.deepcopy(tasks)
                 for index, entry in enumerate(history):
                     if index >= len(restored) or entry.get('task_id') != restored[index]['id']:
@@ -129,6 +181,10 @@ class TaskStream:
     )
 
     def _persist(self, position, history):
+        """Write the manifest, next position, and outcome history when a state path is
+        configured.
+        """
+
         if self.state_path is None:
             return
         if __package__:
@@ -147,15 +203,24 @@ class TaskStream:
 
     @property
     def current_id(self):
+        """Return the current visit's task ID, or None when the queue is complete."""
+
         return self._tasks[self.position]['id'] if self.position < len(self._tasks) else None
 
     def require(self, task_id, current=False):
+        """Check that a task has arrived, optionally requiring it to be the current visit."""
+
         allowed = [t['id'] for t in self._tasks[: self.position + 1]]
         if task_id not in allowed or (current and task_id != self.current_id):
             raise ValueError('Task is unavailable in the current task stream')
 
     def visible(self, difficulty=None, world_type=None):
-        # A repeated arrival is a visit, not a duplicated catalogue entry.
+        """Return distinct arrived tasks as filtered copies with future curriculum references
+        removed.
+        """
+        # Return one catalogue entry per arrived task ID, even when that task has multiple
+        # visits.
+
         tasks = []
         seen = set()
         for task in self._tasks[: min(self.position + 1, len(self._tasks))]:
@@ -172,7 +237,9 @@ class TaskStream:
         ]
 
     def redact(self, task):
-        """Project delivery metadata only; canonical definitions/hashes stay fixed."""
+        """Remove unrevealed prerequisite and dependency IDs from the supplied task's
+        curriculum metadata.
+        """
         revealed = {t['id'] for t in self._tasks[: self.position + 1]}
         curriculum = task.get('curriculum', {})
         for key in ('prerequisites', 'dependencies'):
@@ -181,10 +248,16 @@ class TaskStream:
         return task
 
     def get(self, task_id):
+        """Return the visible copied definition for an arrived task ID."""
+
         self.require(task_id)
         return next(t for t in self.visible() if t['id'] == task_id)
 
     def public_state(self):
+        """Return the current visit, world type, completion status, and copied outcome
+        history.
+        """
+
         return {
             'protocol': 'sequential_hidden_v1',
             'current_task_id': self.current_id,
@@ -197,14 +270,18 @@ class TaskStream:
         }
 
     def advance(self, outcome):
-        """Trusted host reports its outcome; this layer never owns model budgets."""
+        """Persist the host-reported outcome, append deferred work when needed, and move to
+        the next visit.
+        """
         if outcome not in self.OUTCOMES:
             raise ValueError('Unknown task stream outcome')
         with self._lock:
             if self.current_id is None:
                 return
+            # Build a new history list so persistence precedes mutation of the current stream
+            # state.
             history = self.history + [{'task_id': self.current_id, 'outcome': outcome}]
-            # Publish durable advancement before mutating any in-memory state.
+            # Persist the next position and outcome before updating in-memory progress.
             self._persist(self.position + 1, history)
             if outcome == 'deferred':
                 self._tasks.append(copy.deepcopy(self._tasks[self.position]))
@@ -213,6 +290,8 @@ class TaskStream:
 
 
 def add_stream_arguments(parser):
+    """Add generated-order and explicit task-sequence-file CLI options."""
+
     parser.add_argument(
         '--task-sequence',
         choices=['curriculum', 'interleaved', 'family_return'],
@@ -226,6 +305,10 @@ def add_stream_arguments(parser):
 
 
 def stream_from_args(args):
+    """Build stream configuration from CLI ordering options and the optional JSON arrival
+    list.
+    """
+
     return {
         'sequence': args.task_sequence,
         'task_ids': (

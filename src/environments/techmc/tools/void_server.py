@@ -1,4 +1,9 @@
-"""Port-addressed dedicated servers: run creates fresh worlds; resume retains identity."""
+"""Manage dedicated TechMC servers by bridge port.
+
+run prepares a new instance and world. resume authenticates a retained instance.
+The supervisor owns Java startup, readiness, heartbeat checks, periodic saves,
+lifecycle requests, and shutdown records for that instance.
+"""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -49,7 +54,12 @@ SPAWN = [-40, 64, -24]
 SHUTDOWN_TIMEOUT_SECONDS = 90
 
 
+from environments.techmc.paths import ASSET_ROOT
+
+
 def check_port(value):
+    """Convert a port to int and check the supported non-privileged range."""
+
     value = int(value)
     if not 1024 <= value <= 65535:
         raise ValueError('Ports must be 1024..65535')
@@ -57,6 +67,8 @@ def check_port(value):
 
 
 def listening(port):
+    """Probe whether a loopback TCP port accepts a connection."""
+
     try:
         with socket.create_connection(('127.0.0.1', port), timeout=0.3):
             return True
@@ -65,6 +77,8 @@ def listening(port):
 
 
 def free_port(port):
+    """Check whether the current process can bind a loopback TCP port."""
+
     try:
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', port))
@@ -74,16 +88,20 @@ def free_port(port):
 
 
 def control_directory(port):
+    """Return the data-root control directory for a validated bridge port."""
+
     return ROOT / 'runtime/servers' / str(check_port(port))
 
 
 def state(port):
+    """Read the current instance pointer for a port or return None when absent."""
+
     path = control_directory(port) / 'current.json'
     return json.loads(path.read_text(encoding='utf-8')) if path.exists() else None
 
 
 def physical_copy(source, destination):
-    """Copy bytes. Never create aliases, symbolic links, junctions or hard links."""
+    """Copy file or directory contents after checking the input tree for links."""
     source = Path(source)
     destination = Path(destination)
     paths = [source] + list(source.rglob('*')) if source.is_dir() else [source]
@@ -97,6 +115,13 @@ def physical_copy(source, destination):
 
 
 def prepare_instance(port, game_port, seed, task_selection=None, world_type='void'):
+    """Create a new instance from server assets and write its initial metadata.
+
+    Task selection is bound to the requested world type. Void worlds receive the
+    pinned empty-terrain datapack; natural worlds use normal generation. A selected
+    spawner-conversion scenario adds an explicit fixture description for startup.
+    """
+
     port = check_port(port)
     game_port = check_port(game_port)
     selection = TaskSelection(task_selection, world_type=world_type)
@@ -110,6 +135,7 @@ def prepare_instance(port, game_port, seed, task_selection=None, world_type='voi
     directory.mkdir(parents=True, exist_ok=False)
     if not directory.resolve().is_relative_to((ROOT / 'runtime/servers').resolve()):
         raise ValueError('Instance escaped runtime')
+    # receipt: dict | None; natural instances omit the void-template datapack receipt.
     receipt = (
         json.loads((ROOT / 'runtime/void-research-server.json').read_text(encoding='utf-8'))
         if world_type == 'void'
@@ -118,7 +144,7 @@ def prepare_instance(port, game_port, seed, task_selection=None, world_type='voi
     pack = ROOT / 'runtime/datapacks' / receipt['pack'] if receipt else None
     if pack and hashlib.sha256(pack.read_bytes()).hexdigest() != receipt['pack_sha256']:
         raise ValueError('Empty-world datapack hash mismatch')
-    # Selective asset copies: no world, region, entities, player data or links from previous servers.
+    # Copy server dependencies into the new instance before creating its empty world directory.
     for name in ('fabric-server-launch.jar', 'libraries', 'versions'):
         physical_copy(template / name, directory / name)
     cache = template / '.fabric/server'
@@ -133,7 +159,7 @@ def prepare_instance(port, game_port, seed, task_selection=None, world_type='voi
                 source = ROOT / source
             physical_copy(source, directory / 'mods' / source.name)
     physical_copy(
-        ROOT / 'bridge/build/minecraft-agent-26.1.jar',
+        ASSET_ROOT / 'bridge/build/minecraft-agent-26.1.jar',
         directory / 'mods/minecraft-agent-26.1.jar',
     )
     eula = (template / 'eula.txt').read_text(encoding='utf-8')
@@ -213,7 +239,11 @@ def prepare_instance(port, game_port, seed, task_selection=None, world_type='voi
 
 
 def bootstrap_platform(process, port, scenario=None, owner_token_file=None):
+    """Initialize the void spawn platform, optional scenario fixture, and saved world."""
+
     def console(text):
+        """Send and flush one command through the Java process console."""
+
         process.stdin.write(text + '\n')
         process.stdin.flush()
 
@@ -331,7 +361,9 @@ def bootstrap_platform(process, port, scenario=None, owner_token_file=None):
 
 
 def validated_resume_candidate(args):
-    """Authenticate an explicit retained world; slot admission is separate."""
+    """Authenticate the retained instance selected by explicit ID or the stopped port
+    pointer.
+    """
     explicit = getattr(args, 'instance_id', None)
     current = state(args.port) if not explicit else None
     if not explicit and (not current or current.get('status') != 'stopped'):
@@ -361,6 +393,13 @@ def validated_resume_candidate(args):
 
 
 def run_server(args):
+    """Reserve host resources and a game port, then run the instance supervisor.
+
+    A port lease covers the supervisor lifetime. A shorter host lease serializes
+    admission and reservation updates across ports. Errors retain launch details
+    and any failures encountered while releasing the reservation.
+    """
+
     try:
         heap = getattr(args, 'heap_mb', 2048)
         if not 1024 <= heap <= 32768:
@@ -370,6 +409,8 @@ def run_server(args):
             reserved = False
             reservation = ROOT / 'runtime/reservations' / (str(args.port) + '.json')
             try:
+                # The host lease serializes shared reservations; the outer port lease owns this
+                # supervisor.
                 with HostLease(ROOT, timeout=5):
                     check_existing(
                         ROOT,
@@ -427,6 +468,8 @@ def run_server(args):
                         and current.get('status')
                         not in ('starting', 'ready', 'stopping', 'cleanup_failed')
                     ):
+                        # The host lease serializes shared reservations; the outer port lease
+                        # owns this supervisor.
                         with HostLease(ROOT, timeout=5):
                             reservation.unlink(missing_ok=True)
                 except Exception as cleanup_error:
@@ -472,6 +515,15 @@ def run_server(args):
 
 
 def _run_server(args, budget):
+    """Launch Java and supervise one prepared or retained instance through shutdown.
+
+    Startup publishes instance identity before readiness. Log and health readers
+    observe the child while this thread handles initialization, save requests,
+    owner heartbeat expiry, and console commands. Finalization records the child
+    exit, world-save confirmation, diagnostics, and resource-release state.
+    """
+    # resumed_candidate: dict | None, the authenticated retained instance for a resume.
+
     resumed_candidate = (
         validated_resume_candidate(args) if getattr(args, 'resume', False) else None
     )
@@ -488,7 +540,9 @@ def _run_server(args, budget):
     mutex = control / 'supervisor.lock'
     with mutex.open('x', encoding='utf-8') as stream:
         stream.write(str(time.time_ns()))
+    # process: subprocess.Popen[str] | None until Java starts; stdin carries console commands.
     process = None
+    # value: dict | None until the instance has been selected or prepared.
     value = None
     reader = None
     monitor = None
@@ -506,6 +560,8 @@ def _run_server(args, budget):
     write_experiment(experiment_path / 'heartbeat.json', {'wall_ns': time.time_ns()})
 
     def interrupted(signum, frame):
+        """Turn a supervisor termination signal into the normal cleanup path."""
+
         raise KeyboardInterrupt('Supervisor received signal ' + str(signum))
 
     if threading.current_thread() is threading.main_thread():
@@ -522,7 +578,7 @@ def _run_server(args, budget):
             if not free_port(game_port):
                 raise RuntimeError('Original game port is occupied')
             physical_copy(
-                ROOT / 'bridge/build/minecraft-agent-26.1.jar',
+                ASSET_ROOT / 'bridge/build/minecraft-agent-26.1.jar',
                 directory / 'mods/minecraft-agent-26.1.jar',
             )
             value.update(
@@ -601,12 +657,12 @@ def _run_server(args, budget):
             'fabric-server-launch.jar',
             'nogui',
         ]
-        # A child-owned file remains drainable even if the Python supervisor
-        # fails. A PIPE would depend on its daemon reader staying alive.
+        # Java writes directly to a file, so its output can continue if the supervisor exits.
+
         log_path = directory / 'supervisor.log'
         log_offset = log_path.stat().st_size if log_path.exists() else 0
-        # Preserve the displaced slot pointer as evidence; never forge it to
-        # look owned before launching the explicitly authenticated target.
+        # Archive a displaced port pointer before publishing the authenticated resume target.
+
         pointer = control / 'current.json'
         if getattr(args, 'resume', False) and pointer.exists():
             previous_raw = pointer.read_bytes()
@@ -658,11 +714,18 @@ def _run_server(args, budget):
         )
         ready = threading.Event()
         saved = threading.Event()
+        # console_commands: Queue[str], passed from the stdin reader to the supervisor loop.
         console_commands = queue.Queue()
+        # save_label: str | None; a pending label pairs the next save log confirmation with its
+        # request.
         save_label = None
         health_stop = threading.Event()
 
         def sample_health():
+            """Append periodic bridge health samples and update heap monitoring after
+            readiness.
+            """
+
             health = Bridge(
                 'health-' + value['instance_id'],
                 'host',
@@ -688,6 +751,8 @@ def _run_server(args, budget):
         threading.Thread(target=sample_health, daemon=True).start()
 
         def read_logs():
+            """Follow this launch's log bytes and signal startup and save confirmations."""
+
             with log_path.open('r', encoding='utf-8', errors='replace') as log:
                 log.seek(log_offset)
                 while True:
@@ -703,6 +768,8 @@ def _run_server(args, budget):
                         ready.set()
                     if 'Saved the game' in line:
                         saved.set()
+                    # The final world-save log timestamp is compared with the stop request
+                    # during cleanup.
                     if 'All dimensions are saved' in line:
                         value['last_world_save_log_ns'] = time.time_ns()
 
@@ -711,6 +778,8 @@ def _run_server(args, budget):
         if args.console:
 
             def read_console():
+                """Queue operator console lines for the supervisor thread to send."""
+
                 for line in sys.stdin:
                     console_commands.put(line.strip())
 
@@ -720,6 +789,8 @@ def _run_server(args, budget):
         stopping = False
         last_periodic = time.monotonic()
         stop_reason = None
+        # Publish readiness once, then handle owner expiry, saves, console input, and lifecycle
+        # files.
         while process.poll() is None:
             if save_label is not None and saved.is_set():
                 value['last_confirmed_save_ns'] = time.time_ns()
@@ -732,6 +803,8 @@ def _run_server(args, budget):
                     },
                 )
                 write_json(control / 'current.json', value)
+                # save_label: str | None; a pending label pairs the next save log confirmation
+                # with its request.
                 save_label = None
             if not initialized and not stopping and ready.is_set():
                 if not getattr(args, 'resume', False):
@@ -836,6 +909,8 @@ def _run_server(args, budget):
                 ]
         raise
     finally:
+        # Preserve the original launch or supervision exception while collecting cleanup
+        # failures.
         primary_error = locals().get('primary_error')
         try:
             if process is not None and process.poll() is None:
@@ -886,6 +961,8 @@ def _run_server(args, budget):
                     raise failure from shutdown_error
             if process is not None and value is not None:
                 value['stop_reason'] = locals().get('stop_reason')
+                # A clean exit and a world-save log after the stop request confirm graceful
+                # shutdown.
                 value['shutdown_save_confirmed'] = process.returncode == 0 and value.get(
                     'last_world_save_log_ns', 0
                 ) >= value.get('stop_requested_ns', 2**63)
@@ -958,6 +1035,10 @@ def _run_server(args, budget):
 
 
 def main():
+    """Dispatch launch, authenticated resume, status, save, or graceful stop for a selected
+    port.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument('action', choices=['run', 'resume', 'stop', 'save', 'status'])
     parser.add_argument(

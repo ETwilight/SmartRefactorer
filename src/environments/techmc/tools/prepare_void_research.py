@@ -1,4 +1,4 @@
-"""Prepare the 26.1 normal-biome void environment using verified assets."""
+"""Prepare the dedicated void server from acquired game, mod, and datapack assets."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -15,7 +15,17 @@ PACK = 'skyvoid_worldgen_empty_v2_0_11-MC_26_1.zip'
 PACK_SHA = '1162323f7a90ebfdf83985a98c1efb675db5546b2fbd9cea337b5bd7846d6a01'
 
 
+from environments.techmc.paths import ASSET_ROOT
+
+
 def prepare(accept_eula=False):
+    """Populate a new server and write its world-generation and installation receipt.
+
+    An existing receipt returns immediately. A new installation pins the empty
+    terrain datapack and its startup function set, copies server mods, and writes
+    the caller-selected EULA value.
+    """
+
     target = ROOT / 'runtime/void-research-server'
     receipt_path = ROOT / 'runtime/void-research-server.json'
     if target.exists() and not receipt_path.exists():
@@ -39,8 +49,8 @@ def prepare(accept_eula=False):
             'data/skyvoid_worldgen/function/v2.0/versioning/enumerate.mcfunction',
             'data/skyvoid_worldgen/function/v2.0/versioning/resolve_load.mcfunction',
         }
-        # These exact hash-pinned author functions were reviewed: scoreboard
-        # version bookkeeping and startup scheduling, no terrain/item changes.
+        # This pinned pack uses these functions for version scoreboards and startup scheduling.
+
         if set(functions) != reviewed_functions:
             raise ValueError('Unreviewed pack function set')
     target.mkdir(parents=True)
@@ -67,7 +77,7 @@ def prepare(accept_eula=False):
             if digest(src) != mod['sha256']:
                 raise ValueError('Mod digest mismatch')
             shutil.copyfile(src, target / 'mods' / src.name)
-    bridge = ROOT / 'bridge/build/minecraft-agent-26.1.jar'
+    bridge = ASSET_ROOT / 'bridge/build/minecraft-agent-26.1.jar'
     shutil.copyfile(bridge, target / 'mods' / bridge.name)
     (target / 'eula.txt').write_text(
         'eula=true\n' if accept_eula else 'eula=false\n', encoding='utf-8'

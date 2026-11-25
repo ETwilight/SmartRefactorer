@@ -1,4 +1,6 @@
-"""Successive machine trials with one persistent run, inventory and physical machine."""
+"""Run successive product modes and exact-order trials on one retained machine and parent
+session.
+"""
 
 import copy
 import hashlib
@@ -24,6 +26,10 @@ STRUCTURAL_CHECKS = {'integrated_head_disc_machine', 'shared_tree_machine', 'sha
 
 
 def trials_for(task):
+    """Build the published trial list from explicit modes, potion orders, batch orders, or
+    per-species requirements.
+    """
+
     if task.get('mode_trials'):
         return copy.deepcopy(task['mode_trials'])
     if task.get('brew_orders'):
@@ -62,6 +68,8 @@ def trials_for(task):
 
 
 def required_review(task):
+    """Collect unique mandatory rubric and structural-check IDs from the task definition."""
+
     return list(
         dict.fromkeys(
             task.get('mandatory_review_checks', [])
@@ -75,6 +83,10 @@ def required_review(task):
 
 
 def evaluation_mode(task, requested='auto'):
+    """Resolve auto to hybrid when structural review is required, retaining an explicitly
+    requested evaluation mode.
+    """
+
     if requested not in ('auto', 'deterministic', 'hybrid'):
         raise ValueError('Unknown evaluation mode')
     required = required_review(task)
@@ -88,10 +100,16 @@ def evaluation_mode(task, requested='auto'):
 
 
 def within(bounds, pos):
+    """Check whether a position lies inside the three inclusive bound intervals."""
+
     return all(a <= v <= b for a, v, b in zip(bounds['min'], pos, bounds['max']))
 
 
 def validate_review_volumes(task, submission, max_blocks=32768):
+    """Check review geometry against declared machine regions and individual/total block
+    budgets.
+    """
+
     volumes = submission.get('review_volumes', [])
     if not volumes:
         if required_review(task):
@@ -124,6 +142,10 @@ def validate_review_volumes(task, submission, max_blocks=32768):
 
 
 def validate_mode_submission(task, submission):
+    """Validate start controls and every trial's control, operation, and planting-position
+    declarations.
+    """
+
     regions = [
         {'dimension': submission['dimension'], 'bounds': submission['bounds']}
     ] + submission.get('regions', [])
@@ -186,6 +208,10 @@ def validate_mode_submission(task, submission):
 
 
 def apply_controls(call, submission, binding, phase):
+    """Apply lever selections or trigger buttons for the requested control phase and check
+    the native receipt.
+    """
+
     for control in binding['controls']:
         if (control['action'] == 'press_button') != (phase == 'trigger'):
             continue
@@ -203,7 +229,9 @@ def apply_controls(call, submission, binding, phase):
 
 
 def count_components(task, submission, values, order=None):
-    """Return all delivered item/variant counts, deduplicating chest halves and boxes."""
+    """Count distinct physical-slot contents by item/component identity and tally the
+    selected order variant.
+    """
     seen = set()
     counts = {}
     selected = 0
@@ -223,6 +251,8 @@ def count_components(task, submission, values, order=None):
             if not quantity or item.endswith('shulker_box'):
                 continue
             components = slot.get('item_components', {})
+            # identity: str combining the item ID with sorted component JSON for exact delivery
+            # accounting.
             identity = (
                 item + '|' + json.dumps(components, sort_keys=True, separators=(',', ':'))
             )
@@ -238,6 +268,10 @@ def count_components(task, submission, values, order=None):
 
 
 def exact_delivery(before, after, quantity):
+    """Check exact selected-order and total delivery growth, requiring all item/component
+    counts to be nondecreasing.
+    """
+
     deltas = {
         key: after['all'].get(key, 0) - before['all'].get(key, 0)
         for key in set(before['all']) | set(after['all'])
@@ -254,15 +288,41 @@ def exact_delivery(before, after, quantity):
 
 
 class ModeSession:
-    """Children share the parent's native owner and heartbeat; only their own actors retire."""
+    """Give one machine trial its own report ID while sharing the parent's native session.
+
+    base is the parent ActionSession. run_id labels this trial's report/evidence
+    directory; server references the parent's bridge. invoke() delegates to base,
+    retaining the parent's native RPC identity and trace. created is set[str] of
+    evaluator players whose spawn calls returned through this wrapper.
+
+    cleanup() drops those players' inventories, stops and removes them, and
+    waits for their disconnection. Parent session cleanup handles shared clock,
+    settings, heartbeat, and remaining resources after the mode suite.
+
+    Example:
+        trial_session = ModeSession(session, index)
+        feedback = trial_session.invoke(step)
+        errors = trial_session.cleanup()
+
+    feedback is produced through the parent session. errors records failures
+    while retiring the players tracked by this trial wrapper.
+    """
 
     def __init__(self, base, index):
+        """Bind the parent session and server, derive the trial report ID, and initialize its
+        player set.
+        """
+
         self.base = base
         self.run_id = base.run_id + '-trial-' + str(index)
         self.server = base.server
         self.created = set()
 
     def invoke(self, step):
+        """Invoke through the parent session and retain successfully spawned trial-player
+        IDs.
+        """
+
         result = self.base.invoke(step)
         if step['method'] == 'fake_player.spawn':
             self.created.add(step['params']['id'])
@@ -270,9 +330,15 @@ class ModeSession:
 
     @property
     def _legacy_evaluation_snapshot_fixture(self):
+        """Forward the base session's explicit snapshot test-fixture flag."""
+
         return getattr(self.base, '_legacy_evaluation_snapshot_fixture', False)
 
     def cleanup(self):
+        """Drop inventory and retire tracked trial players, waiting for their native
+        disconnection.
+        """
+
         errors = []
         for name in self.created:
             for action in ('drop_inventory', 'stop', 'remove'):
@@ -304,6 +370,10 @@ class ModeSession:
 
 
 def child_task(task, trial):
+    """Build a copied task view for one trial with its selected products and per-trial
+    measurement thresholds.
+    """
+
     value = copy.deepcopy(task)
     value.pop('mode_trials', None)
     value.pop('brew_orders', None)
@@ -341,6 +411,14 @@ def child_task(task, trial):
 
 
 def run_modes(evaluator, instance, submission, tick_mode):
+    """Run the shuffled mode suite, collect child evidence, and finalize its parent report.
+
+    Reuse the parent session and physical machine across trials, optionally
+    repeating the first mode. Aggregate trial results and suite-wide stock
+    checks, request required structural review, then clean up the parent and
+    persist the normalized suite report and evidence.
+    """
+
     task = instance['task']
     session = evaluator.session
     directory = ROOT / 'runs' / session.run_id
@@ -364,6 +442,8 @@ def run_modes(evaluator, instance, submission, tick_mode):
     evidence = {'task': task, 'submission': submission, 'observations': []}
 
     def check(name, status, message):
+        """Append a suite-level check with its explicit pass/fail/inconclusive status."""
+
         report['checks'].append(
             {
                 'id': name,
@@ -384,6 +464,7 @@ def run_modes(evaluator, instance, submission, tick_mode):
             )
             return report
         trials = trials_for(task)
+        # Seed the shuffle from the parent run ID so that run's trial ordering is reproducible.
         random.Random(hashlib.sha256(session.run_id.encode()).digest()).shuffle(trials)
         if (
             task.get('mode_requirements', {}).get('repeat_previous_mode')
@@ -397,7 +478,8 @@ def run_modes(evaluator, instance, submission, tick_mode):
             s.pop('machine_modes', None)
             binding = submission['machine_modes'][trial['id']]
             s['operation'] = copy.deepcopy(binding.get('operation', submission['operation']))
-            # Preserve all destinations for unexpected delivery checks, while scoring only this mode's product.
+            # Use this mode's output subset for scoring; context retains the original
+            # destinations for delivery checks.
             s['outputs'] = [o for o in s['outputs'] if o['product'] in trial['products']]
             if not s['outputs']:
                 raise ValueError('Every mode product needs a declared output destination')
@@ -427,6 +509,8 @@ def run_modes(evaluator, instance, submission, tick_mode):
             if evidence_file.exists():
                 try:
                     observed = json.loads(evidence_file.read_text(encoding='utf-8'))
+                    # Prefix top-level observation IDs with the trial index when collecting
+                    # suite evidence.
                     for observation in observed['observations']:
                         evidence['observations'].append(
                             {
@@ -574,6 +658,8 @@ def run_modes(evaluator, instance, submission, tick_mode):
         else:
             from failure_contract import report as canonical_report, write_measurement
         normalized = canonical_report(report)
+        # Keep the same report object referenced by any early return while updating its
+        # finalized contents.
         report.clear()
         report.update(normalized)
         evidence['result'] = report

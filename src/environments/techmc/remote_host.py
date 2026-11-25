@@ -1,4 +1,4 @@
-"""Opt-in SSH hosts keyed by LOCAL bridge port. No passwords or model credentials."""
+"""Select SSH server profiles by local bridge port and control their managed instances."""
 
 from __future__ import annotations
 
@@ -13,12 +13,15 @@ import subprocess
 import threading
 import time
 
-ROOT = Path(__file__).resolve().parents[2] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
+
 _cache = {}
 _lock = threading.Lock()
 
 
 def profile(port, root=None):
+    """Read and validate the remote-host profile for a local bridge port."""
+
     root = Path(root or ROOT)
     config = Path(os.environ.get('TECHMC_REMOTE_CONFIG', root / 'runtime/remote-servers.json'))
     if not config.is_file():
@@ -43,9 +46,24 @@ def profile(port, root=None):
 
 
 class RemotePrelaunchRejected(RuntimeError):
-    """Trusted remote ACK that this exact launch was rejected before Popen."""
+    """Report a remote rejection acknowledged before server launch.
+
+    The acknowledgement names the action, experiment, instance, and launch. Its
+    protocol fields distinguish a prelaunch capacity decline from a dispatched
+    launch. Construction validates and copies the reply; accessors return its
+    capacity flag or an acknowledgement copy.
+
+    Example:
+        rejection = RemotePrelaunchRejected(ack)
+        capacity_declined = rejection.capacity_declined
+
+    ack is the decoded techmc.prelaunch_ack.v1 reply. The manager uses the flag
+    while recording the rejected launch attempt.
+    """
 
     def __init__(self, acknowledgement):
+        """Validate the acknowledgement and retain its exact launch identity."""
+
         required = {
             'protocol',
             'action',
@@ -80,13 +98,19 @@ class RemotePrelaunchRejected(RuntimeError):
 
     @property
     def acknowledgement(self):
+        """Return a copy of the validated acknowledgement."""
+
         return copy.deepcopy(self._acknowledgement)
 
     @property
     def capacity_declined(self):
+        """Return whether admission rejected the launch for capacity."""
+
         return self._acknowledgement['capacity_declined'] is True
 
     def matches(self, *, action, experiment_id, instance_id, launch_id):
+        """Compare the acknowledgement with one action and launch identity."""
+
         return all(
             self._acknowledgement[k] == v
             for k, v in {
@@ -99,6 +123,8 @@ class RemotePrelaunchRejected(RuntimeError):
 
 
 def _raise_prelaunch_rejection(raw, *, action, experiment_id, instance_id, launch_id):
+    """Raise a matching prelaunch-rejection signal from remote JSON output."""
+
     try:
         ack = json.loads(raw)
     except (ValueError, UnicodeError):
@@ -114,7 +140,28 @@ def _raise_prelaunch_rejection(raw, *, action, experiment_id, instance_id, launc
 
 
 class RemoteHost:
+    """Control one managed remote server through its SSH profile.
+
+    settings comes from profile(local_port) and maps local forwarding ports to
+    the remote host, data root, and server ports. State reads include process and
+    API evidence, then expose the connection through the local tunnel ports.
+
+    execute sends Python source and JSON data over SSH stdin. Control operations
+    use experiment ownership attached by the manager. token_file stores the local
+    bridge token; owner_token_file and experiment_id identify owned lifecycle calls.
+    State reads use a ten-second cache unless fresh=True.
+
+    Example:
+        remote = RemoteHost(settings)
+        state = remote.state(fresh=True)
+
+    This reads the selected server's current state using its configured SSH host.
+    settings is the profile selected by the local bridge port.
+    """
+
     def __init__(self, settings):
+        """Attach the profile and derive its local bridge-token path."""
+
         self.settings = settings
         self.local_port = int(settings['local_port'])
         self.token_file = (
@@ -125,6 +172,8 @@ class RemoteHost:
         )
 
     def ssh(self):
+        """Build the base batch-mode SSH command with the profile's connection settings."""
+
         command = [
             'ssh',
             '-o',
@@ -146,7 +195,13 @@ class RemoteHost:
         return command
 
     def execute(self, code, data=None, output=None, timeout=60):
-        # Send source over stdin: no shell interpolation of paths or parameters.
+        """Send Python source and encoded configuration to the remote interpreter.
+
+        Return captured stdout as bytes. When output is a binary file, stream stdout
+        there and return None. Raise on a nonzero remote command exit.
+        """
+        # Send source on stdin and carry paths and parameters in the encoded config.
+
         payload = {**self.settings, **(data or {})}
         encoded = base64.b64encode(json.dumps(payload).encode()).decode()
         script = (
@@ -168,6 +223,8 @@ class RemoteHost:
         return result.stdout
 
     def state(self, fresh=False):
+        """Read remote state and process/API evidence, mapping its ports to local forwards."""
+
         key = (self.settings['ssh_host'], self.settings['remote_root'], self.local_port)
         with _lock:
             cached = _cache.get(key)
@@ -190,6 +247,7 @@ class RemoteHost:
             "        value['state_note']='Recorded state may be stale; inspect process and supervisor lock before recovery'\n"
             "print(json.dumps(value))\n"
         )
+        # Decode captured stdout bytes to the server-state dict.
         value = json.loads(raw)
         if value:
             if value['bridge_port'] != int(self.settings['remote_port']):
@@ -206,6 +264,8 @@ class RemoteHost:
         return dict(value)
 
     def fetch_token(self):
+        """Fetch the bridge token into this profile's local token file."""
+
         token = self.execute(
             "sys.stdout.buffer.write((root/'runtime/bridge.token').read_bytes())\n"
         )
@@ -216,7 +276,7 @@ class RemoteHost:
         self.token_file.chmod(0o600)
 
     def verify_deployment(self, expected=None):
-        """Hash actual remote assets, not just a receipt. Never starts a process."""
+        """Hash deployed files and compare them with the portable source manifest."""
         if expected is None:
             if __package__:
                 from .deployment import manifest
@@ -247,6 +307,8 @@ class RemoteHost:
         return json.loads(raw)
 
     def require_deployment(self):
+        """Return a matching deployment result or raise with its mismatch details."""
+
         result = self.verify_deployment()
         if result['status'] != 'matched':
             raise RuntimeError(
@@ -256,7 +318,7 @@ class RemoteHost:
         return result
 
     def retained_resume_proof(self, instance_id, experiment_id, owner_token):
-        """Prove the owned target on remote storage, separately from slot admission."""
+        """Read the owned retained instance and current server record for a resume attempt."""
         raw = self.execute(
             "import hashlib\n"
             "sys.path.insert(0,str(root))\n"
@@ -275,6 +337,8 @@ class RemoteHost:
         return json.loads(raw)
 
     def experiment_state(self):
+        """Read the remote experiment record for the attached experiment ID."""
+
         return json.loads(
             self.execute(
                 "sys.path.insert(0,str(root))\nfrom experiment_registry import _read_json_retry\nprint(json.dumps(_read_json_retry(root/'runtime/experiments'/cfg['experiment_id']/'experiment.json')))\n",
@@ -283,6 +347,12 @@ class RemoteHost:
         )
 
     def control(self, action, arguments=(), *, launch_id=None):
+        """Dispatch an owned server lifecycle action and return its output text.
+
+        Starting actions verify deployment and inspect a prelaunch acknowledgement.
+        Refresh the server state after the remote control command returns.
+        """
+
         if action not in ('run', 'resume', 'stop', 'save', 'status'):
             raise ValueError('Invalid remote control action')
         if action in ('run', 'resume'):
@@ -365,9 +435,14 @@ class RemoteHost:
                 launch_id=launch_id,
             )
         self.state(fresh=True)
+        # Lifecycle control exposes the captured bytes as text for local log files.
         return raw.decode()
 
     def task_world_lease(self, release=False, *, launch_id=None, instance_id=None):
+        """Acquire or release the experiment's remote task-world lease and return its
+        receipt.
+        """
+
         credential = getattr(self, 'owner_token_file', None) or os.environ.get(
             'MC_EXPERIMENT_TOKEN_FILE'
         )
@@ -409,6 +484,12 @@ class RemoteHost:
         return json.loads(raw)
 
     def checkpoint(self, label, archive):
+        """Confirm a remote world save and stream its saved files into a local ZIP archive.
+
+        Publish the archive by replacing its temporary file after transfer. Live world
+        ticks can continue during the saved-file copy.
+        """
+
         if not re.fullmatch(r'[A-Za-z0-9_-]+', label):
             raise ValueError('Invalid checkpoint label')
         archive = Path(archive)
@@ -449,13 +530,15 @@ class RemoteHost:
             temporary.unlink(missing_ok=True)
 
     def tunnel(self):
+        """Build the SSH tunnel command after checking local bridge and game ports."""
+
         forwards = [
             (self.local_port, int(self.settings['remote_port'])),
             (int(self.settings['local_game_port']), int(self.settings['remote_game_port'])),
         ]
         if len({x[0] for x in forwards}) != len(forwards):
             raise ValueError('Bridge and game forwarding ports must differ')
-        # Refuse occupied listeners rather than silently using another local server.
+        # Bind-test each local forwarding port before returning the tunnel command.
         for local, _ in forwards:
             with socket.socket() as sock:
                 sock.bind(('127.0.0.1', local))
@@ -466,5 +549,7 @@ class RemoteHost:
 
 
 def for_port(port, root=None):
+    """Return the configured RemoteHost for a local bridge port, or None."""
+
     settings = profile(port, root)
     return RemoteHost(settings) if settings else None

@@ -1,13 +1,35 @@
-"""Explicit JSON argument templates; no environment rules or implicit parameters."""
+"""Resolve task invocation arguments from public data and stored evidence.
+
+$public reads a JSON Pointer from the supplied task context. $evidence names a
+stored record and a pointer into it. $literal carries a JSON value as written.
+These references can be nested in ordinary argument dictionaries and lists.
+"""
 
 import copy, json, re
 
 
 class BindingError(ValueError):
+    """An invocation template has an invalid reference or a non-JSON value.
+
+    The error message identifies the template or pointer that failed. The adapter
+    passes it back to the controller so Propose can revise the invocation arguments.
+
+    Example, from the task-entry preparation path::
+
+        try:
+            arguments = resolve_arguments(template, public, evidence)
+        except BindingError as error:
+            controller.record_invocation_issue(error)
+
+    The controller records the argument problem and returns development to Propose.
+    """
+
     pass
 
 
 def pointer(path):
+    """Return whether a string has valid JSON Pointer syntax and escape sequences."""
+
     return (
         isinstance(path, str)
         and (not path or path.startswith('/'))
@@ -16,6 +38,8 @@ def pointer(path):
 
 
 def read_pointer(target, path):
+    """Follow a JSON Pointer through a dictionary or list and return a copy of its value."""
+
     try:
         for token in path.split('/')[1:] if path else []:
             token = token.replace('~1', '/').replace('~0', '~')
@@ -27,8 +51,11 @@ def read_pointer(target, path):
                     and token.startswith('0')
                 ):
                     raise ValueError('Invalid array index')
+                # target: list -> selected item; the next pointer step can receive a different
+                # container type.
                 target = target[int(token)]
             else:
+                # target: dict -> selected value, which can be another container or a scalar.
                 target = target[token]
     except (KeyError, IndexError, ValueError, TypeError) as exc:
         raise BindingError('Missing or invalid binding pointer ' + path) from exc
@@ -36,6 +63,8 @@ def read_pointer(target, path):
 
 
 def validate_template(value):
+    """Check nested references, literal values, and JSON serialization."""
+
     if isinstance(value, dict):
         if any(not isinstance(key, str) for key in value):
             raise BindingError('JSON object keys must be strings')
@@ -84,9 +113,15 @@ def validate_template(value):
 
 
 def resolve_arguments(template, public, evidence=None):
+    """Replace template references with their public or stored values and return the
+    arguments.
+    """
+
     validate_template(template)
 
     def resolve(value):
+        """Resolve one nested reference, container, or literal argument value."""
+
         if isinstance(value, dict):
             if set(value) == {'$literal'}:
                 return copy.deepcopy(value['$literal'])
@@ -107,6 +142,7 @@ def resolve_arguments(template, public, evidence=None):
             return [resolve(v) for v in value]
         return copy.deepcopy(value)
 
+    # result: JSON value after all reference dictionaries have been replaced by their contents.
     result = resolve(template)
     try:
         if json.loads(json.dumps(result, allow_nan=False)) != result:

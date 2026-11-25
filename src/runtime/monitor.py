@@ -1,8 +1,5 @@
-"""Persistent, read-only experiment observation plus explicit cooperative stops.
-
-No provider calls, game requests, process killing, budget changes or restarts.
-Only definitive infrastructure failures authorize a stop; lack of learning
-progress is reported for operator review instead.
+"""Observe recorded batch activity and request cooperative stops for recorded infrastructure
+failures.
 """
 
 import argparse
@@ -46,11 +43,15 @@ SHARED_FAILURES = {
 
 
 def utc(timestamp):
+    """Convert a Unix timestamp to a UTC ISO 8601 string."""
+
     return datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
 
 
 @contextmanager
 def monitor_lease(path):
+    """Hold an operating-system file lock for one monitor of this batch."""
+
     stream = path.open('a+b')
     try:
         try:
@@ -74,6 +75,8 @@ def monitor_lease(path):
 
 
 def empty_events():
+    """Create empty counters and latest-activity fields for one run's event ledger."""
+
     return {
         'models': {},
         'round': None,
@@ -91,7 +94,32 @@ def empty_events():
 
 
 class BatchMonitor:
+    """Summarize persisted run activity and write cooperative stop controls when needed.
+
+    batch_dir identifies the queue and its monitor output directory. state maps
+    run IDs to event summaries, byte cursors, and progress-review intervals;
+    state.json restores these values across monitor restarts. queue retains the
+    latest readable queue document. errors collects failures from the current
+    snapshot and appends their records to errors.jsonl.
+
+    snapshot() consumes complete new event lines, combines report and accounting
+    summaries, and writes status.json plus an observation record. Recorded
+    infrastructure failures can produce control.json and an intervention receipt.
+    Repeated evidence loops and idle intervals produce operator-review fields.
+    run() holds the batch monitor lock and repeats at interval seconds using
+    the supplied clock, or exits after one snapshot when once is true.
+
+    Example:
+        monitor = BatchMonitor(batch_dir)
+        exit_code = monitor.run(once=True)
+
+    This writes one observation of the batch and any stop requests warranted by
+    its recorded failures. exit_code indicates whether the monitor encountered errors.
+    """
+
     def __init__(self, batch_dir, interval_seconds=600, *, clock=time.time):
+        """Create monitor storage and restore persisted per-run cursors and summaries."""
+
         if interval_seconds <= 0:
             raise ValueError('Monitor interval must be positive')
         self.batch_dir = Path(batch_dir).resolve()
@@ -110,6 +138,10 @@ class BatchMonitor:
                 self.error('monitor.restore', self.state_path, exc)
 
     def error(self, stage, path, exc):
+        """Retain and append a timestamped monitor error, raising if the error log cannot be
+        written.
+        """
+
         item = {
             'time_utc': utc(self.clock()),
             'stage': stage,
@@ -127,6 +159,8 @@ class BatchMonitor:
             raise
 
     def read_json(self, path, stage):
+        """Read a JSON document, returning None for absent files or recorded read errors."""
+
         try:
             return json.loads(path.read_text(encoding='utf-8-sig'))
         except FileNotFoundError:
@@ -137,12 +171,16 @@ class BatchMonitor:
 
     @staticmethod
     def _failure(events, reason, evidence):
+        """Add a distinct infrastructure failure and its evidence to the event summary."""
+
         item = {'reason': reason, 'evidence': evidence}
         if item not in events['system_failures']:
             events['system_failures'].append(item)
 
     @staticmethod
     def _mutation(request):
+        """Classify an action request for the monitor's execution-activity counter."""
+
         if request.get('op') != 'action.execute':
             return False
         action = request.get('params', {}).get('action', {})
@@ -163,6 +201,8 @@ class BatchMonitor:
         )
 
     def event(self, events, value, path):
+        """Apply one ledger event to model, environment, evaluation, and failure summaries."""
+
         kind = value.get('kind')
         when = value.get('time_utc')
         sequence = value.get('sequence')
@@ -315,11 +355,14 @@ class BatchMonitor:
                 self._failure(events, reason, {'file': str(path), 'sequence': sequence})
 
     def consume_events(self, run_dir, state):
+        """Consume complete new JSONL records and persist their byte cursor in the run state."""
+
         path = run_dir / 'log/events.jsonl'
         try:
             stat = path.stat()
         except FileNotFoundError:
             return
+        # identity: list[int], identifying the ledger file separately from its byte offset.
         identity = [stat.st_dev, stat.st_ino]
         cursor = state.setdefault('cursor', {'offset': 0, 'identity': identity})
         if cursor.get('identity') != identity or stat.st_size < cursor['offset']:
@@ -330,10 +373,12 @@ class BatchMonitor:
         with path.open('rb') as stream:
             stream.seek(cursor['offset'])
             while True:
+                # line: bytes; leave an incomplete final line unread for the next snapshot.
                 line = stream.readline()
                 if not line or not line.endswith(b'\n'):
                     break
                 try:
+                    # value is decoded JSON; event records must be dictionaries.
                     value = json.loads(line)
                     if not isinstance(value, dict):
                         raise ValueError('Event record must be an object')
@@ -344,8 +389,12 @@ class BatchMonitor:
                 cursor['offset'] = stream.tell()
 
     def observe_run(self, job, now):
+        """Combine a job's event, report, accounting, and artifact records into one
+        observation.
+        """
+
         run_dir = Path(job['run_dir']).resolve()
-        # Only the named batch's standard run tree can receive stop controls.
+        # Resolve each queued run within this batch's results/runs tree before writing controls.
         if not run_dir.is_relative_to(self.batch_dir.parent.parent / 'runs'):
             raise ValueError('Batch run directory is outside its results/runs tree')
         identifier = job['id']
@@ -360,6 +409,8 @@ class BatchMonitor:
             }
             state['report']['rounds'] = len(report.get('rounds', []))
             state['report']['token_usage'] = report.get('token_usage', {})
+        # report now refers to the retained summary, including a round count in place of the
+        # full round list.
         report = state.get('report', {})
         accounting = (
             self.read_json(run_dir / 'accounting/summary.json', 'accounting.read') or {}
@@ -383,14 +434,18 @@ class BatchMonitor:
         artifacts = run_dir / 'method/artifacts'
         executions = []
         if artifacts.is_dir():
-            # Stat only: input/events files contain large private model traces.
+            # Use execution artifact timestamps as activity markers without loading their trace
+            # contents.
             for path in artifacts.glob('execution-*/input.json'):
                 finished = path.with_name('events.json')
                 latest_time = max(
                     path.stat().st_mtime, finished.stat().st_mtime if finished.exists() else 0
                 )
                 executions.append((latest_time, str(path.parent.relative_to(run_dir))))
+        # latest: tuple[float, str] | None, containing an execution timestamp and run-relative
+        # artifact path.
         latest = max(executions, default=None)
+        # models: dict[str, dict], retaining the latest event state for each model call ID.
         models = events['models']
         usage = accounting or report.get('token_usage') or {}
         carried = events.get('continuation', {})
@@ -411,7 +466,7 @@ class BatchMonitor:
             else 'events' if models else 'accounting_or_report'
         )
         if report.get('finished_at') and isinstance(report.get('token_usage'), dict):
-            # A final authoritative report can survive a lost/truncated event.
+            # Use the finalized report's aggregate counts when the event ledger is incomplete.
             charged = report['token_usage'].get('charged_tokens', charged)
             calls = report.get('model_calls') or calls
             metric_source = 'final_report'
@@ -546,6 +601,10 @@ class BatchMonitor:
         }
 
     def stop(self, run, causes, now):
+        """Write a stop control and intervention receipt, or return the existing stop
+        request.
+        """
+
         path = Path(run['run_dir']) / 'control.json'
         existing = {}
         if path.exists():
@@ -562,8 +621,8 @@ class BatchMonitor:
         if set(existing) - {'max_rounds', 'stop', 'reason'}:
             raise ValueError('Refusing to replace a control with unsupported fields')
         reason = 'Monitor: confirmed system failure affecting this run. Preserve native state and world; no automatic restart or budget renewal.'
-        # RunControl accepts only its public control fields. Audit provenance
-        # belongs in a sidecar, otherwise the stop becomes operator_control_error.
+        # Write failure evidence in the intervention receipt.
+        # control.json contains the fields accepted by RunControl.
         receipt = (
             self.directory
             / 'interventions'
@@ -589,6 +648,10 @@ class BatchMonitor:
         }
 
     def snapshot(self):
+        """Observe all queued runs, request applicable stops, and persist monitor state and
+        status.
+        """
+
         self.errors = []
         now = self.clock()
         queue = self.read_json(self.batch_dir / 'queue.json', 'queue.read')
@@ -649,10 +712,16 @@ class BatchMonitor:
         return result
 
     def run(self, once=False):
+        """Hold the batch monitor lock while taking one or repeated snapshots."""
+
         with monitor_lease(self.directory / 'monitor.lock'):
             return self._run(once)
 
     def _run(self, once=False):
+        """Take snapshots until the batch finishes or once is requested, returning the
+        monitor exit code.
+        """
+
         while True:
             try:
                 result = self.snapshot()
@@ -667,6 +736,8 @@ class BatchMonitor:
 
 
 def main(argv=None):
+    """Parse monitor options and return its completion, interruption, or error exit code."""
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--batch-dir', type=Path, required=True)
     parser.add_argument('--interval-seconds', type=float, default=600)

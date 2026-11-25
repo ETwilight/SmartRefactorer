@@ -1,15 +1,24 @@
-"""Actual block-loot accounting and exact initial-amethyst output debt."""
+"""Combine native block-loot records and identify output from amethyst mature before
+measurement.
+"""
 
 
 def collect_harvest(readbacks):
-    """Combine non-overlapping regional readbacks from one atomic snapshot."""
+    """Combine disjoint regional block-drop readbacks from one ledger epoch and atomic
+    sequence.
+    """
     if not readbacks:
         raise RuntimeError('Harvest telemetry unavailable')
     epoch = None
     sequence = None
+    # source_drops: dict[str, int], summing cumulative item drops from distinct native source
+    # nodes.
     source_drops = {}
     events = []
+    # nodes: set[tuple[str, tuple[int, int, int]]], deduplicating dimension/block-position
+    # readbacks.
     nodes = set()
+    # seen_events: set[tuple[str, int]], keyed by dimension and native harvest sequence.
     seen_events = set()
     for value in readbacks:
         if value.get('version') != 'harvest-ledger-v1' or value.get('complete') is not True:
@@ -53,7 +62,7 @@ def collect_harvest(readbacks):
 
 
 def source_drop_delta(start, end):
-    """Do not silently treat unavailable natural input generation as zero."""
+    """Compute item drop deltas between complete snapshots of the same harvest-ledger epoch."""
     if (
         not start.get('harvest_complete')
         or not end.get('harvest_complete')
@@ -73,13 +82,14 @@ def source_drop_delta(start, end):
 
 
 def amethyst_ineligible_drops(start_tick, previous, current, *, start_sequence=None):
-    """Return exact shard drops from clusters already mature at measure start.
+    """Separate newly harvested shards by whether their clusters matured before measurement.
 
-    The sequence boundary is preferable to a tick boundary: a cluster can mature
-    after an atomic snapshot but during the same game tick. Actual returned loot
-    determines count, including Fortune, explosions, and empty/silk-touch loot.
+    Consider harvests between the previous and current sequence boundaries.
+    When start_sequence is supplied, maturation order distinguishes events
+    within one game tick. Counts use observed loot, including Fortune yields.
     """
     source_drop_delta(previous, current)
+    # old_sequence and new_sequence: int boundaries for the harvests added by this segment.
     old_sequence = previous['harvest_sequence']
     new_sequence = current['harvest_sequence']
     ineligible = []
@@ -92,6 +102,7 @@ def amethyst_ineligible_drops(start_tick, previous, current, *, start_sequence=N
         else:
             if 'matured_sequence' not in event:
                 raise RuntimeError('Precise amethyst maturation order unavailable')
+            # old: bool; these observed shard drops add to the initial-cluster deduction.
             old = event['matured_sequence'] <= start_sequence
         (ineligible if old else eligible).append(event)
     return {

@@ -1,7 +1,8 @@
-"""Method identity and historical initialization proof for environment recovery.
+"""Describe the SR world and method state selected for continuation.
 
-World/session/receipt verification belongs to adapters.environments.techmc.resume.
-No recovery operation is performed by importing this module.
+The shared environment adapter reads world, session, and ownership records.
+This module supplies the SR method identity and the saved import-failure case
+used when preparing a startup-recovery receipt.
 """
 
 import hashlib
@@ -11,7 +12,7 @@ from adapters.environments.techmc import resume as environment_resume
 
 
 def _verify_plugin_import_recovery(path, source, root, original_manager):
-    """Verify an exact pre-algorithm failed continuation; never accept flags as proof."""
+    """Return the matching manager snapshot for a recorded plugin-import failure."""
     receipt = _read_json_retry(path)
     if receipt.get('schema') != 'smartrefactorer.plugin_import_recovery.v1':
         return None
@@ -77,6 +78,8 @@ def _verify_plugin_import_recovery(path, source, root, original_manager):
 
 
 def uninvoked(source):
+    """Return whether saved method state contains no invocation or executed-candidate record."""
+
     state = _read_json_retry(Path(source) / 'method/state/smartrefactorer/development.json')
     return not any(
         state.get(key)
@@ -85,6 +88,8 @@ def uninvoked(source):
 
 
 def resume_descriptor(source, *, root, method='smartrefactorer', recovery_receipt=None):
+    """Read the SR source run through the environment's continuation descriptor builder."""
+
     if method != 'smartrefactorer':
         raise ValueError('Explicit checkpoint belongs to a different method')
     return environment_resume.resume_descriptor(
@@ -99,6 +104,8 @@ def resume_descriptor(source, *, root, method='smartrefactorer', recovery_receip
 
 
 def create_unstarted_recovery(source_run, failed_run, output_path, *, root):
+    """Write a startup-recovery receipt for the source and failed continuation runs."""
+
     return environment_resume.create_unstarted_recovery(
         source_run, failed_run, output_path, root=root, descriptor_for=resume_descriptor
     )

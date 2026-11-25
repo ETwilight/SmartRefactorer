@@ -1,4 +1,4 @@
-"""Live normal-Python execution; persistence and resource decisions stay in runner."""
+"""Run a candidate Python function and exchange its environment requests with the adapter."""
 
 import asyncio
 import copy
@@ -13,6 +13,8 @@ from .python_backend import SkillModules, bind
 
 
 def type_name(value):
+    """Return the Python type name qualified by its defining module."""
+
     kind = type(value)
     return (
         type.__getattribute__(kind, '__module__')
@@ -22,13 +24,19 @@ def type_name(value):
 
 
 def snapshot(value, seen=None):
-    """Keep JSON values exact and label other Python types explicitly in journals."""
+    """Convert a value into a JSON record for the execution journal.
+
+    JSON scalars and containers retain their values. Tuples and sets carry type
+    labels; other objects carry their type and identity. seen tracks the current
+    recursion path so cyclic references can be represented by an index.
+    """
     if value is None or type(value) in (str, int, bool):
         return value
     if type(value) is float:
         import math
 
         return value if math.isfinite(value) else {'python_type': 'float', 'repr': repr(value)}
+    # seen: None | dict[int, int] -> dict[int, int], mapping object identity to recursion index.
     seen = {} if seen is None else seen
     identity = id(value)
     if identity in seen:
@@ -50,6 +58,8 @@ def snapshot(value, seen=None):
 
 
 def exception_snapshot(exc):
+    """Collect the exception type, arguments, message, and formatted traceback."""
+
     try:
         message = str(exc)
     except BaseException:
@@ -67,12 +77,32 @@ def exception_snapshot(exc):
 
 
 class Program:
-    """Execute normal Python with lossless root outcomes and optional call tracing.
+    """Execute one candidate call in a worker thread.
 
-    Default events describe function boundaries without copying nested locals.
-    Root input remains in arguments, root output in result, and every request /
-    exception retains its original payload. Full helper values require explicit
-    debug opt-in; fixtures disable discarded boundary events altogether.
+    components is a component-ID mapping copied for this invocation. entry names
+    the component to call, arguments supplies its input, and directory holds the
+    temporary Python modules loaded by SkillModules. result keeps the actual Python
+    return value; exception keeps a raised exception object.
+
+    events is a Queue of dictionaries sent to the adapter. A request event suspends
+    the calling skill until the adapter places its feedback in answers. completed
+    and exception events finish the invocation. cancel() releases a waiting request.
+
+    trace_calls adds function-boundary events. trace_values also snapshots helper
+    arguments and returns; these values can be large when they include world data.
+
+    Example, with call tracing disabled to show just request exchange::
+
+        program = Program(
+            components, entry, arguments, directory, trace_calls=False
+        ).start()
+        while True:
+            event = program.events.get()
+            if event['kind'] != 'request':
+                break
+            program.deliver(environment.handle(event['request']))
+
+    The final event contains either the component result or its exception record.
     """
 
     def __init__(
@@ -86,6 +116,8 @@ class Program:
         trace_calls=True,
         trace_values=False
     ):
+        """Copy the invocation inputs and create its request and feedback queues."""
+
         self.components = copy.deepcopy(components)
         self.entry = entry
         self.arguments = copy.deepcopy(arguments)
@@ -98,12 +130,14 @@ class Program:
         self.thread = None
         self.exception = None
         self.result = None
-        # Root arguments, public requests/results and exceptions are retained
-        # separately. Repeated helper locals are not a resumable Python stack.
+        # Root arguments, results, requests, and exceptions have their own journal records.
+
         self.trace_calls = trace_calls
         self.trace_values = trace_values
 
     def start(self):
+        """Start the worker thread and return this Program."""
+
         self.thread = threading.Thread(
             target=self._run, name='sr-program-' + self.invocation_id, daemon=True
         )
@@ -111,6 +145,8 @@ class Program:
         return self
 
     def request(self, request):
+        """Send one public request and wait for the adapter feedback."""
+
         if not isinstance(request, dict):
             raise TypeError('The request capability accepts a public request dictionary')
         with self.serial:
@@ -127,19 +163,31 @@ class Program:
             )
 
     async def request_async(self, request):
+        """Run the blocking request exchange through an asyncio worker thread."""
+
         return await asyncio.to_thread(self.request, request)
 
     def deliver(self, feedback):
+        """Place a copy of the adapter feedback in the waiting call queue."""
+
         self.answers.put(copy.deepcopy(feedback))
 
     def cancel(self):
+        """Signal the worker to stop waiting for feedback."""
+
         self.cancelled.set()
 
     def _run(self):
+        """Load candidate modules, call the entrypoint, and publish its final event."""
+
         try:
             with SkillModules(self.components, self.directory) as modules:
                 source_files = {str(path): name[7:] for name, path in modules.files.items()}
+                # instructions: dict[CodeType, dict[int, tuple[str, str]]], indexed by bytecode
+                # offset.
                 instructions = {}
+                # active_frames: set[int] of frame identities whose entry has already been
+                # recorded.
                 active_frames = set()
                 public_names = {
                     name: spec.get('interface', {}).get('entrypoint', 'run')
@@ -147,13 +195,17 @@ class Program:
                 }
 
                 def profile(frame, event, value):
+                    """Record selected skill calls and returns, including generator
+                    suspension.
+                    """
+
                     name = source_files.get(frame.f_code.co_filename)
                     if name is None or frame.f_code.co_name == '<module>':
                         return
                     identity = id(frame)
                     if event == 'call':
-                        # A suspended generator receives another call event on
-                        # resume. Its original boundary is still open.
+                        # Resuming a generator emits another call event for the same open frame.
+
                         if identity in active_frames:
                             return
                         caller = (
@@ -238,6 +290,8 @@ class Program:
                 try:
                     self.result = function(*args, **kwargs)
                     if inspect.isawaitable(self.result):
+                        # self.result: Awaitable[Any] -> Any, the completed async skill return
+                        # value.
                         self.result = asyncio.run(self.result)
                 finally:
                     if self.trace_calls:

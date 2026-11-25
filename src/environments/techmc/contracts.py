@@ -1,4 +1,9 @@
-"""Versioned JSON contracts shared by CLI, Python controllers and evaluators."""
+"""Define the versioned JSON schemas for TechMC requests, feedback, tasks, and evaluations.
+
+Schema constants are dictionaries consumed by Draft202012Validator.
+SCHEMAS maps public names to complete schemas; validate() checks runtime
+values and export() writes the schemas into the project-owned assets.
+"""
 
 from pathlib import Path
 import json
@@ -6,11 +11,15 @@ from jsonschema import Draft202012Validator
 
 VERSION = '1.0'
 INTERFACE_LANGUAGE = 'en'
-ROOT = Path(__file__).resolve().parents[2] / "assets/techmc"
+from environments.techmc.paths import ASSET_ROOT, DATA_ROOT as ROOT
+
 ID = {'type': 'string', 'pattern': '^[A-Za-z0-9_.:-]{1,128}$'}
+# ITEM: a JSON Schema string for minecraft:xxx minecraft-styled items / blocks / mobs / etc.
 ITEM = {'type': 'string', 'pattern': '^minecraft:[a-z0-9_/]+$'}
 INT32 = {'type': 'integer', 'minimum': -2147483648, 'maximum': 2147483647}
+# POS: a JSON Schema dict for integer [x, y, z] block coordinates.
 POS = {'type': 'array', 'items': INT32, 'minItems': 3, 'maxItems': 3}
+# VEC: a JSON Schema dict for numeric [x, y, z] positions, including fractional coordinates.
 VEC = {'type': 'array', 'items': {'type': 'number'}, 'minItems': 3, 'maxItems': 3}
 DIM = {
     'type': 'string',
@@ -19,6 +28,10 @@ DIM = {
 
 
 def obj(properties, required=None):
+    """Build an object schema with the supplied required fields and additional properties
+    disabled.
+    """
+
     return {
         'type': 'object',
         'properties': properties,
@@ -26,7 +39,7 @@ def obj(properties, required=None):
         'additionalProperties': False,
     }
 
-
+# To specify a container either by its position or by its entity_uuid, both allows an additional specification of the dimension.
 CONTAINER = {
     'oneOf': [
         obj({'position': POS, 'dimension': DIM}, ['position']),
@@ -43,6 +56,7 @@ OUTPUT_TARGET = obj(
         'min_per_game_hour': {'type': 'number', 'exclusiveMinimum': 0},
     }
 )
+# To declare a conversion ratio between input and output materials.
 MATERIAL_CONVERSION = obj(
     {
         'input': ITEM,
@@ -79,7 +93,7 @@ SUBMISSION = obj(
             'maxItems': 128,
             'items': obj(
                 {
-                    'role': ID,
+                    'role': ID,     # whether the role is required is the job of required_roles
                     'position': POS,
                     'purpose': {'type': 'string', 'minLength': 1, 'maxLength': 2000},
                     'dimension': DIM,
@@ -94,12 +108,14 @@ SUBMISSION = obj(
             'items': obj(
                 {
                     'product': ITEM,
+                    # the container(s) that collects the outputs
                     'containers': {
                         'type': 'array',
                         'minItems': 0,
                         'maxItems': 128,
                         'items': CONTAINER,
                     },
+                    # an array of positions to indicate the complete workflow of collection, but currently only checks whether they are all bounded in the declared regions
                     'collection_path': {
                         'type': 'array',
                         'minItems': 1,
@@ -120,17 +136,19 @@ SUBMISSION = obj(
                 'items': CONTAINER,
             },
         },
+        # declare a (currently MUST be) stationary fake player
         'operation': obj(
             {
                 'afk_position': VEC,
-                'driver': {'enum': ['none', 'attack', 'use', 'attack_and_use']},
-                'target': {'anyOf': [POS, {'type': 'null'}]},
-                'aim_point': {'anyOf': [VEC, {'type': 'null'}]},
-                'tool': {'anyOf': [ITEM, {'type': 'null'}]},
-                'planting_footprint': {'enum': ['single', '2x2']},
-                'tool_components': {'type': 'object'},
+                'driver': {'enum': ['none', 'attack', 'use', 'attack_and_use']},    # when driver == none, target, aim_point and tool must all be null
+                'target': {'anyOf': [POS, {'type': 'null'}]},                       # the target BLOCK position
+                'aim_point': {'anyOf': [VEC, {'type': 'null'}]},                    # the aiming point VECTOR, should be in the range of the targeted block
+                'tool': {'anyOf': [ITEM, {'type': 'null'}]},                        # the tool must be in the allowed_driver_tools of the task
+                'planting_footprint': {'enum': ['single', '2x2']},                  # single vs 2x2 tree planting
+                'tool_components': {'type': 'object'},                              # mainly enchantments of the tool
                 'offhand_item': ITEM,
-                'startup_steps': {'type': 'string', 'maxLength': 4000},
+                'startup_steps': {'type': 'string', 'maxLength': 4000},             # will not be executed
+                # consumables must appear in inputs, and must be declared for offhand to use
                 'consumables': {
                     'type': 'array',
                     'maxItems': 32,
@@ -161,6 +179,7 @@ SUBMISSION = obj(
         'claims',
     ],
 )
+#
 CONTROL = obj(
     {
         'position': POS,
@@ -872,6 +891,9 @@ SCHEMAS = {
 
 
 def validate(name, value):
+    """Validate a value against a named schema and report up to twelve errors in path order."""
+    # errors: list[ValidationError], sorted by the string form of their instance paths.
+
     errors = sorted(
         Draft202012Validator(
             SCHEMAS[name], format_checker=Draft202012Validator.FORMAT_CHECKER
@@ -885,7 +907,9 @@ def validate(name, value):
 
 
 def export():
-    folder = ROOT / 'schemas'
+    """Write the named schemas as Draft 2020-12 JSON files under ASSET_ROOT/schemas."""
+
+    folder = ASSET_ROOT / 'schemas'
     folder.mkdir(exist_ok=True)
     for name, schema in SCHEMAS.items():
         (folder / (name + '.schema.json')).write_text(

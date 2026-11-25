@@ -16,18 +16,34 @@ import net.minecraft.world.level.block.state.BlockState;
 import research.agent.CookingLedger;
 
 @Mixin(value=AbstractFurnaceBlockEntity.class,remap=false)
+/**
+ * Connect furnace fuel and completed recipe callbacks to CookingLedger.
+ *
+ * The pre-burn hook copies the input stack. setRecipeUsed consumes that thread-local
+ * copy and derives the completed output from the running recipe definition.
+ * Fuel is recorded immediately before the vanilla consumeFuel call.
+ *
+ * <pre>{@code
+ * Map<String, Object> sample = CookingLedger.read(world, min, max);
+ * }</pre>
+ * The sample exposes cumulative furnace consumption and production in the region.
+ */
 public abstract class CookingObservationMixin {
     @Unique private static final ThreadLocal<ItemStack> techmc_input=new ThreadLocal<>();
     @Inject(method="serverTick",at=@At(value="INVOKE",target="Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;consumeFuel(Lnet/minecraft/core/NonNullList;Lnet/minecraft/world/item/ItemStack;)V"),require=1)
+    /** Read the furnace fuel slot at the consumption callback. */
     private static void techmc_fuel(ServerLevel world,BlockPos pos,BlockState state,AbstractFurnaceBlockEntity entity,CallbackInfo ci) {
         CookingLedger.fuel(world,pos,entity.getItem(1));
     }
     @Inject(method="serverTick",at=@At(value="INVOKE",target="Lnet/minecraft/world/level/block/entity/AbstractFurnaceBlockEntity;burn(Lnet/minecraft/core/NonNullList;Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/world/item/ItemStack;)V"),require=1)
+    /** Copy the input stack before vanilla mutates the cooking inventory. */
     private static void techmc_input(ServerLevel world,BlockPos pos,BlockState state,AbstractFurnaceBlockEntity entity,CallbackInfo ci) {
         techmc_input.set(entity.getItem(0).copy());
     }
     @Inject(method="setRecipeUsed",at=@At("HEAD"),require=1)
+    /** Consume the saved input and record the completed cooking recipe output. */
     private void techmc_cooked(RecipeHolder<?> recipe,CallbackInfo ci) {
+        // Mixin applies this callback to a furnace instance; recover that target type.
         var self=(AbstractFurnaceBlockEntity)(Object)this;
         ItemStack input=techmc_input.get();techmc_input.remove();
         if(input!=null&&self.getLevel() instanceof ServerLevel world&&recipe!=null&&recipe.value() instanceof AbstractCookingRecipe cooking)

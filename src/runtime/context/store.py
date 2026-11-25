@@ -1,8 +1,4 @@
-"""上下文的内容寻址存储与重复内容编码。
-
-完整 JSON 以规范字节计算哈希；展示视图把重复的大对象换成精确引用，
-read 根据引用和 JSON Pointer 取回对应内容。
-"""
+"""Store JSON values by content hash and build views with repeated values factored out."""
 
 import copy
 import hashlib
@@ -14,19 +10,41 @@ from collections import Counter
 
 
 def canonical(value):
+    """Encode a JSON value as sorted, compact UTF-8 bytes for hashing."""
+
     return json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False
     ).encode('utf-8')
 
 
 class ContextStore:
+    """Keep complete JSON values on disk and present repeated subtrees as references.
+
+    folder is a Path containing one JSON file per SHA-256 content ID. min_bytes
+    sets the minimum encoded size for factoring out a value. last_stats records
+    the original and presented byte counts from the most recent view(). read()
+    retrieves a complete stored value or a subtree selected by JSON Pointer.
+
+    Example:
+        store = ContextStore(folder)
+        identifier = store.put(feedback)
+        result = store.read(identifier, '/result')
+
+    result is the original feedback's result field, loaded from its stored JSON.
+    """
+
     def __init__(self, folder, min_bytes=512):
+        """Create the storage directory and initialize presentation statistics."""
+
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self.min_bytes = min_bytes
         self.last_stats = {}
 
     def put(self, value):
+        """Write a JSON value under its content hash and return that hash."""
+        # data: bytes; the hash identifies these exact canonical JSON bytes.
+
         data = canonical(value)
         identifier = hashlib.sha256(data).hexdigest()
         target = self.folder / (identifier + '.json')
@@ -37,6 +55,8 @@ class ContextStore:
         return identifier
 
     def read(self, identifier, path=''):
+        """Load a stored value, verify its hash, and follow an optional JSON Pointer."""
+
         if not re.fullmatch(r'[0-9a-f]{64}', identifier):
             raise ValueError('Invalid context reference')
         target = self.folder / (identifier + '.json')
@@ -45,22 +65,29 @@ class ContextStore:
         data = target.read_bytes()
         if hashlib.sha256(data).hexdigest() != identifier:
             raise ValueError('Context reference integrity check failed')
+        # value: a JSON object, array, or scalar decoded from the stored bytes.
         value = json.loads(data)
         if path:
             if not path.startswith('/'):
                 raise ValueError('Use a JSON Pointer beginning with /')
             for key in path[1:].split('/'):
-                # JSON Pointer 先解码 ~1，再解码 ~0；顺序决定字面 ~1 如何还原。
+                # Decode ~1 before ~0 so a literal ~1 encoded as ~01 remains ~1.
                 key = key.replace('~1', '/').replace('~0', '~')
                 if isinstance(value, list):
                     if not re.fullmatch(r'0|[1-9][0-9]*', key):
                         raise ValueError('Invalid JSON Pointer array index')
+                    # value becomes the selected array element, which may have a different JSON
+                    # type.
                     value = value[int(key)]
                 else:
+                    # value becomes the selected object field, which may have a different JSON
+                    # type.
                     value = value[key]
         return value
 
     def reference(self, value):
+        """Store a value and return its ID with a complete read_context request."""
+
         identifier = self.put(value)
         return {
             'id': identifier,
@@ -68,14 +95,18 @@ class ContextStore:
         }
 
     def view(self, value):
-        """生成重复对象的精确引用视图，并保存原始上下文。
+        """Build a smaller reference view when factoring repeated values saves bytes.
 
-        用户数据包含保留标记时使用原结构；已召回反馈作为字面内容保留。
+        Store the original value first. Normalize JSON embedded in strings, except
+        within recalled feedback. Source data containing reserved markers keeps its
+        original structure. last_stats describes the view actually returned.
         """
         original = self.put(value)
         collision = False
 
         def normalize(node, literal=False):
+            """Expose embedded JSON while retaining its source text for exact reads."""
+
             nonlocal collision
             if isinstance(node, dict):
                 collision = collision or bool(
@@ -99,6 +130,7 @@ class ContextStore:
                 and node.lstrip().startswith(('{', '['))
             ):
                 try:
+                    # node is str here; parsed is the JSON container encoded by that string.
                     parsed = json.loads(node)
                 except (ValueError, RecursionError):
                     return node
@@ -106,7 +138,7 @@ class ContextStore:
             return node
 
         normalized = normalize(value)
-        # 原始数据出现编码标记时保留原结构，标记空间与用户内容分别解释。
+        # Reserved markers in source data require the original, unencoded view.
         if collision:
             size = len(canonical(value))
             self.last_stats = {
@@ -121,12 +153,16 @@ class ContextStore:
         counts = Counter()
 
         def identity(node):
+            """Return a content ID for a sufficiently large container or string."""
+
             if not isinstance(node, (dict, list, str)):
                 return None
             data = canonical(node)
             return hashlib.sha256(data).hexdigest() if len(data) >= self.min_bytes else None
 
         def count(node):
+            """Count occurrences of each large value throughout the normalized tree."""
+
             identifier = identity(node)
             if identifier:
                 counts[identifier] += 1
@@ -138,14 +174,17 @@ class ContextStore:
                     count(item)
 
         count(normalized)
+        # objects: dict[str, object], mapping content IDs to their encoded definitions.
         objects = {}
 
         def encode(node, skip=None):
+            """Replace repeated values with references and collect their inline definitions."""
+
             identifier = identity(node)
             if identifier and identifier != skip and counts[identifier] > 1:
                 if identifier not in objects:
                     objects[identifier] = encode(node, skip=identifier)
-                    # Exact object recall does not depend on the inline pool.
+                    # Persist each referenced value so read_context can retrieve it by ID.
                     assert self.put(node) == identifier
                 return {'$context_ref': identifier}
             if isinstance(node, dict):

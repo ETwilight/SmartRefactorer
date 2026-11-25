@@ -1,7 +1,8 @@
-"""Offline, backed-up block/entity reset of ONLY the dedicated research world.
+"""Plan or apply an offline reset of the dedicated void research world.
 
-Keep its documented 5x5 stone landing platform and all biome/generator metadata.
-Default is dry-run. Requires confirmed server shutdown and validates all output.
+The reset clears block and entity data while retaining the 5x5 stone landing
+platform, biome palettes, generation metadata, and player data. --apply backs up
+the world and verifies staged region files before replacing the originals.
 """
 
 from pathlib import Path as _ToolPath
@@ -21,15 +22,25 @@ import zipfile
 import zlib
 import nbtlib as nbt
 
-ROOT = Path(__file__).resolve().parents[3] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
+
 MASK = (1 << 64) - 1
 
 
 def records(path):
+    """Read a region header and its indexed chunk NBT records.
+
+    Return (bytes, list[tuple[int, nbt.File]]). Chunk compression is selected by
+    each record's compression byte; an empty placeholder yields an empty list.
+    """
+
     with path.open('rb') as stream:
         header = stream.read(8192)
         if not header:
-            return bytes(8192), []  # Vanilla creates empty region placeholders.
+            return (
+                bytes(8192),
+                [],
+            )  # Vanilla can create an empty region placeholder before its first chunk write.
         if len(header) != 8192:
             raise ValueError('Invalid region header: ' + str(path))
         result = []
@@ -54,6 +65,8 @@ def records(path):
 
 
 def block_counts(chunk):
+    """Count section block states by unpacking each palette index."""
+
     counts = Counter()
     for section in chunk.get('sections', []):
         state = section.get('block_states', {})
@@ -62,16 +75,21 @@ def block_counts(chunk):
             counts[str(palette[0]['Name'])] += 4096
         elif palette:
             bits = max(4, (len(palette) - 1).bit_length())
+            # Palette indices occupy whole slots within each 64-bit word; slots do not cross
+            # words.
             per_long = 64 // bits
             data = state['data']
             mask = (1 << bits) - 1
             for cell in range(4096):
+                # NBT stores signed longs; the mask recovers the unsigned bits before shifting.
                 value = (int(data[cell // per_long]) & MASK) >> ((cell % per_long) * bits)
                 counts[str(palette[value & mask]['Name'])] += 1
     return counts
 
 
 def reset_chunk(chunk, dimension, spawn):
+    """Replace section blocks with air, retaining the spawn platform in its one chunk."""
+
     x, y, z = spawn
     platform_y = y - 1
     platform_chunk = (x // 16, z // 16)
@@ -85,12 +103,14 @@ def reset_chunk(chunk, dimension, spawn):
         if preserve and int(section['Y']) == platform_y // 16:
             palette.append(nbt.Compound({'Name': nbt.String('minecraft:stone')}))
             state['palette'] = nbt.List[nbt.Compound](palette)
+            # 256 packed words hold 4096 four-bit palette indices, initially all air (index 0).
             values = [0] * 256
             for px in range(x - 2, x + 3):
                 for pz in range(z - 2, z + 3):
                     if (px // 16, pz // 16) != platform_chunk:
                         raise ValueError('Platform crosses chunks; unsupported reset layout')
                     cell = ((platform_y % 16) << 8) | ((pz % 16) << 4) | (px % 16)
+                    # Set this cell to palette index 1, the stone entry.
                     values[cell // 16] |= 1 << ((cell % 16) * 4)
             state['data'] = nbt.LongArray(values)
         section['block_states'] = state
@@ -104,9 +124,12 @@ def reset_chunk(chunk, dimension, spawn):
 
 
 def write_region(path, header, chunks):
+    """Serialize chunks into sector-aligned zlib records and rebuild the region header."""
+
     location = bytearray(4096)
     timestamps = bytearray(header[4096:8192])
     bodies = []
+    # The first two 4096-byte sectors contain locations and timestamps.
     sector = 2
     for index, chunk in chunks:
         buffer = io.BytesIO()
@@ -128,6 +151,8 @@ def write_region(path, header, chunks):
 
 
 def main():
+    """Build the reset plan and counts, then optionally back up and replace staged regions."""
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
@@ -183,6 +208,7 @@ def main():
                 chunk['Entities'] = nbt.List[nbt.Compound]()
             else:
                 chunk['Sections'] = nbt.Compound()
+        # plans holds modified in-memory NBT; on-disk regions change only in the apply phase.
         plans.append((path, header, chunks))
     non_air = {
         name: count for name, count in after.items() if name != 'minecraft:air' and count

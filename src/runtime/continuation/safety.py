@@ -1,8 +1,5 @@
-"""Evidence for a failed continuation that never left read-only discovery.
-
-This does not establish world ownership or accounting validity; the normal
-continuation validators must still verify those. It only admits a clean failed
-bootstrap to those validators without rewriting its historical report.
+"""Recognize failed continuation bootstraps whose completed environment work was
+discovery-only.
 """
 
 import json
@@ -10,6 +7,13 @@ from pathlib import Path
 
 
 def clean_discovery_only_failure(source, report):
+    """Check the event ledger and cleanup record for a discovery-only failed segment.
+
+    Require one continuation anchor, paired completed discovery requests, and
+    unchanged carried model usage. This classification lets the caller proceed
+    to the separate world-ownership and continuation-accounting checks.
+    """
+
     cleanup = report.get('cleanup') or {}
     if (
         report.get('status') != 'failed'
@@ -20,6 +24,8 @@ def clean_discovery_only_failure(source, report):
     ):
         return False
     anchor = None
+    # pending: dict[str, dict], mapping outstanding environment call IDs to their discovery
+    # requests.
     pending = {}
     completed = 0
     try:
@@ -51,7 +57,8 @@ def clean_discovery_only_failure(source, report):
                         return False
                     completed += 1
                 elif kind not in ('round.finish', 'audit.finish', 'run.finish'):
-                    # Includes paid/model-start and every program/native event.
+                    # Reject model, program, and other events outside the discovery bootstrap
+                    # sequence.
                     return False
     except (OSError, ValueError, KeyError, TypeError):
         return False

@@ -1,9 +1,13 @@
-"""Explicit presentation views; canonical feedback is always retained separately."""
+"""Build full, summarized, reference, field-selected, and region-specific feedback views."""
 
 import copy
 
 
 def brief(value, depth=0):
+    """Summarize large strings, arrays, and deep objects, marking omitted contents for later
+    retrieval.
+    """
+
     if isinstance(value, str):
         return (
             value
@@ -24,16 +28,29 @@ def brief(value, depth=0):
 
 
 def selected(value, paths):
+    """Copy values addressed by dotted field paths, interpreting path segments as indices
+    inside lists.
+    """
+
     result = {}
     for path in paths:
         node = value
         for key in path.split('.'):
+            # node changes to the selected child JSON value at each path segment.
             node = node[int(key)] if isinstance(node, list) else node[key]
         result[path] = copy.deepcopy(node)
     return result
 
 
 def present(feedback, options=None):
+    """Return the requested feedback view with a reference to the original request.
+
+    Region views select named sections. Other views keep full feedback, select
+    dotted fields, omit the result for a reference, or summarize the result.
+    Command and evaluation results have dedicated summaries retaining their
+    outcome fields and relevant incident metadata.
+    """
+
     if __package__:
         from .region_views import is_region, present_region
     else:
@@ -59,6 +76,8 @@ def present(feedback, options=None):
     if detail == 'full' and not options.get('fields'):
         return copy.deepcopy(feedback)
     result = copy.deepcopy(feedback)
+    # original: a JSON value; the full response stays in feedback while result receives the
+    # selected view.
     original = feedback.get('result')
     if (
         isinstance(original, dict)
@@ -77,6 +96,7 @@ def present(feedback, options=None):
             and value.get('method') == 'command.run'
             and isinstance(value.get('result'), dict)
         ):
+            # body: dict containing command output inside the RPC result envelope.
             body = value['result']
             receipt = {
                 k: copy.deepcopy(body[k])
@@ -90,7 +110,7 @@ def present(feedback, options=None):
                 )
                 if k in body
             }
-            # Native command output may contain the answer to a read-only query.
+            # Include messages for read-like commands and commands with no successful callbacks.
             text = body.get('command', '').lstrip('/')
             read = (
                 text.startswith(('data get ', 'forceload query', 'tick query', 'list'))
@@ -130,8 +150,8 @@ def present(feedback, options=None):
                 value.get('metrics', {}).get('production', {})
             )
             result['result']['cleanup_errors'] = copy.deepcopy(value.get('cleanup_errors', []))
-            # The envelope carries the typed incident in every view; avoid
-            # duplicating it in the report summary.
+            # Infrastructure metadata is carried by the response envelope.
+            # The evaluation summary above includes its outcome and check counts.
         elif (
             isinstance(value, dict)
             and isinstance(value.get('items'), list)
@@ -140,7 +160,8 @@ def present(feedback, options=None):
                 for v in value['items']
             )
         ):
-            # feedback.list is already explicitly paged; keep incident metadata.
+            # feedback.list already has explicit pagination; retain its returned page and
+            # incident metadata.
             result['result'] = copy.deepcopy(value)
         else:
             result['result'] = brief(value)

@@ -1,4 +1,4 @@
-"""Create a small documented landing platform in the otherwise empty world."""
+"""Create and record the dedicated void world landing platform."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -17,6 +17,10 @@ from environments.techmc.tools.bootstrap import ROOT, write_json
 
 
 def main():
+    """Load the spawn chunk, place its stone platform, and restore temporary experiment
+    settings.
+    """
+
     world = ROOT / 'runtime/void-research-server/agent-void-research'
     spawn = nbtlib.load(world / 'level.dat').unpack()['Data']['spawn']
     x, y, z = map(int, spawn['pos'])
@@ -25,6 +29,9 @@ def main():
     )
 
     def call(method, params=None):
+        """Poll one bridge request ID until its result arrives or the deadline expires."""
+        # Retries share one request ID so polling refers to the original mutation.
+
         request_id = str(uuid.uuid4())
         deadline = time.monotonic() + 120
         while True:
@@ -63,6 +70,7 @@ def main():
     assert len(platform['blocks']) == 25 and all(
         b['state'] == 'Block{minecraft:stone}' for b in platform['blocks']
     )
+    # Release temporary settings after the platform and respawn radius have been checked.
     restored = call('experiment.restore', {'keep': []})
     assert not restored.get('errors'), restored
     clock1 = call('clock.query')

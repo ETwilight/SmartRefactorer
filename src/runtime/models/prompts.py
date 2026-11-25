@@ -1,4 +1,4 @@
-"""Method/transport instructions; no task-domain rules or worked solutions."""
+"""Instructions for Baseline decisions and recent-history working memory."""
 
 from runtime.lifecycle import EPISODE_TERMINATION_GUIDE
 

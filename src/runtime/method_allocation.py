@@ -1,4 +1,4 @@
-"""Retain the trusted host's admission, ownership, heartbeat and final-save lifecycle."""
+"""Run the selected method worker through its environment provider's allocation lifecycle."""
 
 import argparse
 import json
@@ -11,6 +11,10 @@ CAPACITY_EXIT = 75
 
 
 def capacity_error(exc):
+    """Check the allocation record for declined capacity before either server or method
+    startup.
+    """
+
     record = getattr(exc, 'allocation_record', {})
     return (
         record.get('capacity_declined') is True
@@ -22,13 +26,17 @@ def capacity_error(exc):
 
 
 def main(argv=None):
+    """Preflight the selected method, allocate its worker, and save the resulting exit or
+    capacity record.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True, type=Path)
     args = parser.parse_args(argv)
     config = json.loads(args.config.read_text(encoding='utf-8'))
     provider = preflight(
         config
-    )  # No server, model call, or token consumption before this succeeds.
+    )  # Validate the configuration before requesting an environment allocation.
     run_dir = Path(config['run_dir'])
     run_dir.mkdir(parents=True, exist_ok=True)
     research = Path(__file__).resolve().parents[1]

@@ -28,8 +28,23 @@ import net.minecraft.world.phys.AABB;
 import java.util.*;
 import static research.agent.RpcServer.*;
 
-/** Read-only evaluator observations. No layout templates, item injection or goals. */
+/**
+ * Read server-side regions, containers, actors, and source observations for evaluation.
+ *
+ * Container views retain physical member IDs, per-slot product capacity, supported
+ * components, and one level of shulker contents. Region views combine block counts,
+ * inventories, loose items, entities, carried blocks, equipment inspection, and
+ * processing/source ledgers. Loaded and ticking coverage accompanies the snapshot.
+ * These methods sample the current game state on the server thread.
+ *
+ * <pre>{@code
+ * JsonElement snapshot = EvaluationReadback.region(world, params);
+ * }</pre>
+ * params supplies inclusive min/max coordinates; the evaluator uses the returned counts
+ * and ledgers alongside later samples.
+ */
 public final class EvaluationReadback {
+    /** Read whether a loaded position belongs to the requested generated structure. */
     public static JsonElement naturalSource(ServerLevel world,JsonObject p) {
         BlockPos pos=ServerBridge.position(p);
         var structure=world.registryAccess().lookupOrThrow(Registries.STRUCTURE).getValue(Identifier.parse(str(p,"structure")));
@@ -38,11 +53,15 @@ public final class EvaluationReadback {
         var start=world.structureManager().getStructureAt(pos,structure);
         return json(Map.of("loaded",true,"natural_world",Boolean.getBoolean("minecraft.agent.natural_world"),"valid_structure",start.isValid()&&start.getBoundingBox().isInside(pos),"position",xyz(pos),"structure",str(p,"structure")));
     }
+    /** Encode a block position as an ordered coordinate list. */
     private static List<Integer> xyz(BlockPos p) { return List.of(p.getX(),p.getY(),p.getZ()); }
+    /** Identify a physical block container by dimension and coordinates. */
     private static String key(ServerLevel world, BlockPos p) { return world.dimension().identifier()+":"+p.getX()+","+p.getY()+","+p.getZ(); }
+    /** Read slots and product capacity, including one level of packed shulker contents. */
     private static Map<String,Object> inventory(Container c, String identity, List<String> products) {
         return inventory(c,identity,products,true);
     }
+    /** Read container slots and optionally expand packed shulker items. */
     private static Map<String,Object> inventory(Container c, String identity, List<String> products, boolean unpack) {
         List<Object> slots = new ArrayList<>();
         for(int slot=0;slot<c.getContainerSize();slot++) {
@@ -66,16 +85,19 @@ public final class EvaluationReadback {
                 if(packed!=null)packed.copyInto(contents);
                 SimpleContainer box=new SimpleContainer(27);
                 for(int inner=0;inner<27;inner++)box.setItem(inner,contents.get(inner));
+                // The inner read disables unpacking, giving this slot one explicit shulker-content level.
                 entry.put("shulker_slots",inventory(box,identity+":"+slot+"/shulker",products,false).get("slots"));
             }
             slots.add(entry);
         }
         return new LinkedHashMap<>(Map.of("container_id",identity,"slots",slots,"slot_count",c.getContainerSize()));
     }
+    /** Read one entity or block container, joining both physical halves of a double chest. */
     public static JsonElement container(ServerLevel world,JsonObject p) {
         List<String> products=p.has("products")?p.getAsJsonArray("products").asList().stream().map(JsonElement::getAsString).toList():List.of();
         if(products.size()>32)throw new IllegalArgumentException("At most 32 products");
         List<Object> slots=new ArrayList<>();List<String> members=new ArrayList<>();List<Object> locations=new ArrayList<>();String type;
+        // openable is null for non-chest containers; chest members contribute a combined boolean.
         Boolean openable=null;
         if(p.has("entity_uuid")) {
             Entity e=world.getEntity(UUID.fromString(str(p,"entity_uuid")));
@@ -90,6 +112,7 @@ public final class EvaluationReadback {
             List<BlockPos> positions=new ArrayList<>();positions.add(pos);
             if(state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE)!=ChestType.SINGLE)positions.add(pos.relative(ChestBlock.getConnectedDirection(state)));
             if(state.getBlock() instanceof ChestBlock)openable=true;
+            // Canonical member order gives either queried half the same double-chest identity.
             positions.sort(Comparator.comparing(BlockPos::toShortString));
             for(BlockPos member:positions) {
                 if(!world.hasChunkAt(member))throw new IllegalStateException("Other chest half not loaded");
@@ -101,6 +124,7 @@ public final class EvaluationReadback {
         }
         Map<String,Object> result=new LinkedHashMap<>();result.put("loaded",true);result.put("dimension",world.dimension().identifier().toString());result.put("container_id",String.join("|",members));result.put("members",members);result.put("locations",locations);result.put("type",type);result.put("openable",openable);result.put("slots",slots);result.put("slot_count",slots.size());result.put("inventory_accounting_version","nested-items-v1");result.put("item_components_version","item-components-v1");result.put("source","server");result.put("tick",world.getGameTime());result.put("sample_monotonic_ns",System.nanoTime());return json(result);
     }
+    /** Sample a bounded region and aggregate inventory, entity, equipment, and ledger data. */
     public static JsonElement region(ServerLevel world,JsonObject p) {
         var a=p.getAsJsonArray("min");var b=p.getAsJsonArray("max");
         BlockPos min=new BlockPos(a.get(0).getAsInt(),a.get(1).getAsInt(),a.get(2).getAsInt()),max=new BlockPos(b.get(0).getAsInt(),b.get(1).getAsInt(),b.get(2).getAsInt());
@@ -108,6 +132,7 @@ public final class EvaluationReadback {
         if(volume<1||volume>32768||min.getX()>max.getX()||min.getY()>max.getY()||min.getZ()>max.getZ())throw new IllegalArgumentException("Invalid or excessive read region");
         Map<String,Integer> blocks=new TreeMap<>(),items=new TreeMap<>();List<Object> containers=new ArrayList<>(),furnaces=new ArrayList<>(),budding=new ArrayList<>();int unloaded=0,unticking=0;
         SurvivalEquipment equipment=new SurvivalEquipment();
+        // equipment checks all encountered player equipment; stock totals omit player-owned inventory.
         SurvivalEquipment stock=new SurvivalEquipment();
         for(BlockPos pos:BlockPos.betweenClosed(min,max)) {
             if(!world.hasChunkAt(pos)){unloaded++;continue;}
@@ -128,6 +153,7 @@ public final class EvaluationReadback {
         Map<String,Integer> entities=new TreeMap<>(),falling=new TreeMap<>();
         for(Entity e:world.getEntities((Entity)null,area,e->area.contains(e.position()))) {
             if(e instanceof FallingBlockEntity block)falling.merge(BuiltInRegistries.BLOCK.getKey(block.getBlockState().getBlock()).toString(),1,Integer::sum);
+            // Carried Enderman blocks join falling blocks as material still in transit.
             if(e instanceof EnderMan enderman&&enderman.getCarriedBlock()!=null)falling.merge(BuiltInRegistries.BLOCK.getKey(enderman.getCarriedBlock().getBlock()).toString(),1,Integer::sum);
             if(!(e instanceof LivingEntity livingEntity)||livingEntity.isAlive())entities.merge(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString(),1,Integer::sum);
             if(e instanceof Container c){int slot=0;for(ItemStack stack:c){equipment.inspect(stack,"entity:"+e.getUUID()+":"+slot);stock.inspect(stack,"entity:"+e.getUUID()+":"+slot++);if(!stack.isEmpty())items.merge(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString(),stack.getCount(),Integer::sum);}}
@@ -152,6 +178,7 @@ public final class EvaluationReadback {
         result.put("inventory_accounting_version","nested-items-v1");
         result.put("entity_counts",entities);return json(result);
     }
+    /** Read connected player identities, locations, fake-player flags, and life state. */
     public static JsonElement actors(MinecraftServer server) {
         return json(server.getPlayerList().getPlayers().stream().map(p->Map.of("name",p.getPlainTextName(),"uuid",p.getUUID().toString(),"position",List.of(p.getX(),p.getY(),p.getZ()),"dimension",p.level().dimension().identifier().toString(),"fake",p.getClass().getName().equals("carpet.patches.EntityPlayerMPFake"),"alive",p.getHealth()>0&&!p.isDeadOrDying(),"health",p.getHealth(),"spectator",p.isSpectator())).toList());
     }

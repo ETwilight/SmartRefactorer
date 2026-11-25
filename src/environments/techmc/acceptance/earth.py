@@ -1,8 +1,9 @@
-"""Vanilla earth-material conservation and automatic operating-resource checks.
+"""Account for earth-material quantities, recipe transactions, and operating supplies.
 
-Material quantities use quarter-block units so a clay block and its four clay
-balls are equal. Inventory includes packed boxes through item_stock; block and
-falling-block stocks remain in the same ledger. No machine shape is prescribed.
+EARTH_UNITS measures material in quarter-block units: a clay block is four
+units and a clay ball is one. Stock includes inventories, operating-player
+holdings, placed blocks, and falling blocks. Recipe events account for
+changes in these family totals caused by the actual crafting transactions.
 """
 
 EARTH_UNITS = {
@@ -29,11 +30,15 @@ BOTTLE_ITEMS = ('minecraft:glass_bottle',) + POTION_ITEMS
 
 
 def inventory_stock(region, item, item_stock):
-    """Include the operating player's actual holdings, without creating stock."""
+    """Add the operating player's holdings to the supplied region inventory/loose-item count."""
     return item_stock(region, item) + region.get('operating_player_counts', {}).get(item, 0)
 
 
 def material_stock(region, item, item_stock):
+    """Count one material in inventories, the operating player, placed blocks, and falling
+    blocks.
+    """
+
     if 'inflight_block_counts' not in region:
         raise RuntimeError('Falling-block stock telemetry unavailable for earth accounting')
     return (
@@ -46,11 +51,8 @@ def material_stock(region, item, item_stock):
 def earth_mass_balance(
     start, end, item_stock, products=(), auxiliary_inputs=('minecraft:wheat',)
 ):
-    """Account for conversions and real crafter inputs, not merely delivered items.
-
-    Use the operation-start snapshots for conservation. Separately use
-    earth_new_output on measurement-start/end snapshots to exclude pre-grown or
-    pre-converted buffers from new production.
+    """Reconcile earth-family stock changes with recipe-event adjustments and auxiliary-input
+    consumption.
     """
     before = {item: material_stock(start, item, item_stock) for item in EARTH_UNITS}
     after = {item: material_stock(end, item, item_stock) for item in EARTH_UNITS}
@@ -64,6 +66,8 @@ def earth_mass_balance(
         'recipe_observers', []
     ):
         raise RuntimeError('Actual vanilla crafter-event telemetry unavailable')
+    # totals: dict[str, dict[str, int]], containing consumed, produced, and fuel deltas by item
+    # ID.
     totals = {}
     for field in ('consumed', 'produced', 'fuel'):
         initial = start['cooking_totals'][field]
@@ -74,8 +78,10 @@ def earth_mass_balance(
         }
         if any(n < 0 for n in totals[field].values()):
             raise RuntimeError('Recipe-event counters decreased')
-    # Minecraft recipes need not conserve physical volume. Account for the
-    # actual vanilla transaction before testing the remaining family balance.
+    # Recipe events can change the total quarter-block units represented by these material
+    # families.
+    # Apply their consumed/produced/fuel adjustment before checking the remaining stock
+    # difference.
     recipe_adjustment = sum(
         EARTH_UNITS.get(i, 0) * n for i, n in totals['produced'].items()
     ) - sum(
@@ -84,6 +90,8 @@ def earth_mass_balance(
         for i, n in totals[field].items()
     )
     ledger_inputs = {}
+    # auxiliary_losses: dict[str, int | str], holding stock differences or a
+    # missing-required-craft message.
     auxiliary_losses = {}
     for item in auxiliary_inputs:
         consumed = totals['consumed'].get(item, 0) + totals['fuel'].get(item, 0)
@@ -102,6 +110,7 @@ def earth_mass_balance(
         and totals['produced'].get('minecraft:packed_mud', 0) <= 0
     ):
         auxiliary_losses['minecraft:packed_mud'] = 'No completed vanilla craft recorded'
+    # All terms use quarter-block units, including the recipe transaction adjustment.
     unaccounted = initial_units + recipe_adjustment - final_units
     return {
         'passed': unaccounted == 0 and not auxiliary_losses,
@@ -118,7 +127,9 @@ def earth_mass_balance(
 
 
 def earth_new_output(start, end, collected, item_stock):
-    """Pre-converted world blocks cannot become newly produced inventory credit."""
+    """Compare credited collected products with growth in their complete
+    inventory/block/falling-block stocks.
+    """
     created = {
         item: material_stock(end, item, item_stock) - material_stock(start, item, item_stock)
         for item in collected
@@ -132,12 +143,8 @@ def earth_new_output(start, end, collected, item_stock):
 
 
 def earth_operating_supplies(start, end, item_stock, *, check_startup=True):
-    """Empty bottles may be supplied; prefilled potions cannot bypass filling.
-
-    The shared single-input checker must include glass_bottle and all raw inputs.
-    The operating-player policy must permit only the declared placement/tilling
-    action, not water-bottle filling. With no human restocking, vanilla mud creation
-    then requires the machine to supply water bottles automatically.
+    """Check initial filled-potion stock when requested and conservation of bottle items
+    across operation.
     """
     filled = {
         item: inventory_stock(start, item, item_stock)
@@ -157,7 +164,7 @@ def earth_operating_supplies(start, end, item_stock, *, check_startup=True):
 
 
 def earth_input_items(profile_id):
-    """Inputs authorized at the single entry; selected outputs are not feedstock."""
+    """Return the permitted single-entry feedstock item IDs for an earth-material profile."""
     dirt = ['minecraft:dirt', 'minecraft:coarse_dirt', 'minecraft:rooted_dirt']
     if profile_id == 'dirt':
         return ['minecraft:coarse_dirt', 'minecraft:rooted_dirt']

@@ -1,13 +1,37 @@
-"""Task-stream environment lifecycle, including receipt-safe saved-world binding.
-
-The method adapter supplies _resume; this layer owns concrete environment APIs.
-"""
+"""Configure task-stream environments and reconnect verified saved task/world bindings."""
 
 from adapters.environments.techmc.gateway import TechMCProvider
 
 
 class TaskStreamProvider(TechMCProvider):
+    """Apply task-stream setup to methods using the shared TechMC provider.
+
+    This subclass checks the selected arrivals, attaches a TaskStream and
+    retained task-world manager, and restores verified saved bindings. A method
+    subclass can override _resume() for its own checkpoint format; the inherited
+    provider handles allocation, connection options, scheduling, and auditing.
+
+    A method's _verified_descriptor may identify an API-only checkpoint created
+    before primitive invocation. connect() then constructs an ActionSession
+    handle using the verified session ID and original server port, while the
+    Environment restores its saved API state.
+
+    Example:
+        provider = TaskStreamProvider()
+        gateway = provider.connect(provider.connection_options(config))
+        provider.configure_run(gateway, config)
+        gateway.close()
+
+    The gateway is configured for sequential task visits and retained task
+    worlds. Method-specific subclasses use this lifecycle with their own
+    continuation descriptor implementation.
+    """
+
     def preflight(self, config):
+        """Check knowledge dependencies and validate the configured arrival sequence or
+        continuation descriptor.
+        """
+
         from environments.techmc.knowledge_backend import preflight
 
         preflight()
@@ -31,6 +55,8 @@ class TaskStreamProvider(TechMCProvider):
         )
 
     def configure_run(self, environment, config):
+        """Attach task delivery and worlds, or restore their verified saved task binding."""
+
         options = config.get('options', {})
         resume = self._resume(config)
         if resume:
@@ -52,6 +78,10 @@ class TaskStreamProvider(TechMCProvider):
         environment.enable_task_worlds()
 
     def connect(self, configuration):
+        """Connect through the base provider or reconstruct the session handle for a verified
+        API-only checkpoint.
+        """
+
         descriptor = getattr(self, '_verified_descriptor', None)
         if descriptor and descriptor.get('api_only_before_invocation'):
             from environments.techmc import Environment

@@ -14,8 +14,20 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import research.agent.HarvestLedger;
 
 @Mixin(value=BlockBehaviour.BlockStateBase.class,remap=false)
+/**
+ * Forward returned vanilla block loot and its origin to HarvestLedger.
+ *
+ * The return hook uses the already-computed drop list and loot-context origin.
+ * Missing origin for nonempty drops records an observer coverage error.
+ *
+ * <pre>{@code
+ * Map<String, Object> sample = HarvestLedger.read(world, min, max);
+ * }</pre>
+ * The sample exposes the cumulative quantities recorded by these loot callbacks.
+ */
 public abstract class HarvestObservationMixin {
     @Inject(method="getDrops",at=@At("RETURN"),require=1)
+    /** Read the returned drop stacks and attach their observed block origin. */
     private void techmc_actual_drops(LootParams.Builder params,CallbackInfoReturnable<List<ItemStack>> ci) {
         try {
             var origin=params.getOptionalParameter(LootContextParams.ORIGIN);

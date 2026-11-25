@@ -1,4 +1,6 @@
-"""On-demand, credential-scoped runner memory. No PID/path is accepted from agents."""
+"""Read host-recorded memory samples for the runner bound to the environment's experiment
+owner.
+"""
 
 import json
 import os
@@ -14,12 +16,15 @@ else:
 
 
 def last_sample(path):
+    """Return the latest decodable complete JSON record from the file's last 64 KiB."""
+
     with path.open('rb') as stream:
         stream.seek(0, 2)
         size = stream.tell()
         stream.seek(max(0, size - 65536))
         tail = stream.read(65536)
-    lines = tail.split(b'\n')[:-1]  # Ignore an in-progress final write.
+    # Scan complete newline-terminated records from the sampled tail.
+    lines = tail.split(b'\n')[:-1]
     for line in reversed(lines):
         try:
             return json.loads(line)
@@ -29,6 +34,10 @@ def last_sample(path):
 
 
 def read(environment):
+    """Return the bound runner's latest memory sample and pressure classification, or an
+    unavailable reason.
+    """
+
     remote = getattr(environment.session.server, 'remote', None)
     identifier = getattr(remote, 'experiment_id', None) or os.environ.get('MC_EXPERIMENT_ID')
     unavailable = {
@@ -54,6 +63,7 @@ def read(environment):
         age = max(0, (time.time_ns() - sample['wall_ns']) / 1_000_000_000)
         runner = sample['runner']
         limit = record.get('runner_memory_limit_bytes')
+        # limit becomes a positive int byte limit or None when no valid host limit is recorded.
         limit = limit if type(limit) is int and limit > 0 else None
         rss = runner.get('rss_bytes')
         pressure = (

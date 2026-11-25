@@ -1,4 +1,4 @@
-"""Lazy registries: importing a CLI never loads all native algorithm stacks."""
+"""Register method and environment factories and import their implementations when selected."""
 
 from importlib import import_module
 from pathlib import Path
@@ -12,7 +12,7 @@ _METHOD_PLUGINS = {
     'speedrunner': 'adapters.methods.speedrunner.plugin:SpeedRunnerPlugin',
 }
 
-# 按实际安装的 adapter 注册方法；完整工作区与精简发布包共用这一入口。
+# Register the method plugins present in this source tree.
 _SOURCE_ROOT = Path(__file__).resolve().parents[1]
 METHODS = {
     name: target
@@ -22,18 +22,25 @@ METHODS = {
 
 
 def register_environment(name, target):
+    """Add a named environment factory to the registry."""
+
     if name in ENVIRONMENTS:
         raise ValueError('Environment already registered: ' + name)
     ENVIRONMENTS[name] = target
 
 
 def register_method(name, target):
+    """Add a named method factory to the registry."""
+
     if name in METHODS:
         raise ValueError('Method already registered: ' + name)
     METHODS[name] = target
 
 
 def resolve(registry, name):
+    """Instantiate a registered factory or the factory named by a module:symbol string."""
+    # target: str | Callable[[], object]; strings name a module and its zero-argument factory.
+
     target = registry[name]
     if not isinstance(target, str):
         return target()

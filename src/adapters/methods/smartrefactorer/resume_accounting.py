@@ -1,4 +1,4 @@
-"""Read-only accounting eligibility for continuation; never exactify unknown usage."""
+"""Collect carried model calls and compare their charges with continuation event ledgers."""
 
 import hashlib
 import json
@@ -8,19 +8,26 @@ from audit.recorder import budget_bounded
 
 
 def _integer(value):
+    """Return whether the value is a nonnegative Python int."""
+
     return type(value) is int and value >= 0
 
 
 def _same(a, b):
+    """Compare two values using sorted, finite JSON encodings."""
+
     return json.dumps(a, sort_keys=True, separators=(',', ':'), allow_nan=False) == json.dumps(
         b, sort_keys=True, separators=(',', ':'), allow_nan=False
     )
 
 
 def _equivalent_limits(left, right):
-    # These optional fields have an existing missing == None meaning. Non-None
-    # values and all other keys remain exact; never silently loosen a cap.
+    """Compare limits after removing optional entries whose value is None."""
+    # Omitted round_tokens/max_task_attempts and explicit None describe the same optional limit.
+
     def normalized(value):
+        """Remove unset optional round and attempt limits from a limit dictionary."""
+
         return {
             k: v
             for k, v in value.items()
@@ -35,6 +42,8 @@ def _equivalent_limits(left, right):
 
 
 def _segments(source, report):
+    """Yield the current run and its hash-linked predecessor reports, newest first."""
+
     original_limits = report.get('limits')
     seen = set()
     while True:
@@ -65,10 +74,14 @@ def _segments(source, report):
             raise ValueError(
                 'Continuation ancestry identity, accounting hash or original caps differ'
             )
+        # source and report now refer to the preceding segment; their types remain Path and
+        # dict.
         source, report = predecessor, previous
 
 
 def _events(source):
+    """Yield decoded events from the source run's complete JSONL records."""
+
     with (source / 'log/events.jsonl').open('rb') as stream:
         for line in stream:
             if not line.endswith(b'\n'):
@@ -77,7 +90,8 @@ def _events(source):
 
 
 def collect_resume_model_calls(source, report):
-    """Include canonical setup/maintenance calls outside any round, in real order."""
+    """Collect model calls by ID and order them using the continuation event ledgers."""
+    # models: dict[str, dict], keyed by call ID while reports and ledger records are merged.
     models = {}
     groups = [record.get('model_calls', []) for record in report.get('rounds', [])]
     groups.extend(
@@ -115,12 +129,8 @@ def collect_resume_model_calls(source, report):
 
 
 def validate_resume_accounting(source, report=None):
-    """Reconcile every carried call, finite charge and canonical finish evidence.
-
-    Historical exact-only reports remain readable. Unknown calls additionally
-    require their original full model.finish and a preceding bound-attestation
-    event, not a copied summary flag. Chained continuations retain the original
-    call evidence through hash-bound predecessor reports/launch options.
+    """Compare carried charges with their original call records and return reconciled usage
+    totals.
     """
     source = Path(source).resolve()
     report = (

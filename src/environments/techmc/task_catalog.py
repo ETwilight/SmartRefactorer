@@ -1,13 +1,15 @@
-"""Versioned English production tasks, grouped by difficulty."""
+"""Load published task definitions, validate their operating rules, and bind selected product
+profiles.
+"""
 
 import copy
 import hashlib
 import json
 
 if __package__:
-    from .contracts import ROOT, validate
+    from .contracts import ASSET_ROOT as ROOT, validate
 else:
-    from contracts import ROOT, validate
+    from contracts import ASSET_ROOT as ROOT, validate
 
 DIFFICULTIES = ('easy', 'medium', 'hard', 'expert')
 SUPPORTED_CHECKS = frozenset(
@@ -32,6 +34,8 @@ SUPPORTED_CHECKS = frozenset(
 
 
 def available_checks(task):
+    """Return the generic and task-specific acceptance check names supported for this task."""
+
     checks = set(SUPPORTED_CHECKS)
     if task.get('machine_limits'):
         checks.add('machine_bounds')
@@ -95,18 +99,25 @@ def available_checks(task):
 
 
 def stable_hash(value):
+    """Hash a value's sorted, compact UTF-8 JSON representation."""
+
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
     ).hexdigest()
 
 
 def list_tasks(difficulty=None, world_type=None):
+    """Validate the complete published catalogue and return copied, hashed tasks matching the
+    supplied filters.
+    """
+
     if world_type is not None and world_type not in ('void', 'natural'):
         raise ValueError('Unknown world type: ' + str(world_type))
     if difficulty is not None and difficulty not in DIFFICULTIES:
         raise ValueError('Unknown difficulty: ' + str(difficulty))
     manifest = json.loads((ROOT / 'tasks/catalog.json').read_text(encoding='utf-8'))
     validate('task-catalog', manifest)
+    # values: list[dict], collecting validated definitions from all four difficulty files.
     values = []
     if [entry['difficulty'] for entry in manifest['lists']] != list(DIFFICULTIES):
         raise ValueError('Expected easy, medium, hard and expert task lists')
@@ -125,6 +136,8 @@ def list_tasks(difficulty=None, world_type=None):
                 raise ValueError('Task difficulty does not match its list')
             if not json.dumps(task, ensure_ascii=False).isascii():
                 raise ValueError('Published task text must be English')
+            # m refers to this task's measurement dictionary while catalogue invariants are
+            # checked.
             m = task['measurement']
             segments = m.get('segments', 1)
             if m['window_ticks'] % segments:
@@ -196,6 +209,7 @@ def list_tasks(difficulty=None, world_type=None):
             if policy['allowed_drivers'] == ['none'] and task['allowed_driver_tools']:
                 raise ValueError('Idle observers must not receive driver tools')
             profiles = task['product_profiles']
+            # published_products: set[str], combining item IDs from every product profile.
             published_products = {p for profile in profiles for p in profile['products']}
             if set(m.get('product_targets', {})) - published_products:
                 raise ValueError('Product targets must name published products')
@@ -236,6 +250,8 @@ def list_tasks(difficulty=None, world_type=None):
         values.extend(group['tasks'])
     if len({t['id'] for t in values}) != len(values):
         raise ValueError('Duplicate task IDs')
+    # by_id: dict[str, dict], used to resolve prerequisite IDs and verify their earlier
+    # curriculum order.
     by_id = {t['id']: t for t in values}
     for task in values:
         for prerequisite in task['curriculum']['prerequisites']:
@@ -253,17 +269,27 @@ def list_tasks(difficulty=None, world_type=None):
 
 
 def get_task(task_id):
+    """Load one published task definition by ID, raising when the ID is unknown."""
+
     return next((task for task in list_tasks() if task['id'] == task_id), None) or _unknown(
         task_id
     )
 
 
 def select_profile(task, profile_id=None):
+    """Copy a task, apply its selected product profile, and recompute its definition hash.
+
+    Adjust profile-dependent inputs, outputs, recipe observers, measurement
+    targets, and acceptance checks. Inventory-batch profiles replace continuous
+    output/storage rules with the declared bucket-batch requirements.
+    """
+
     task = copy.deepcopy(task)
     profiles = task['product_profiles']
     selected = next((p for p in profiles if p['id'] == (profile_id or profiles[0]['id'])), None)
     if selected is None:
         raise ValueError('Unknown product profile: ' + str(profile_id))
+    # Remove the published hash before deriving the selected profile's task hash.
     task.pop('task_hash', None)
     task['selected_profile'] = selected['id']
     task['primary_products'] = selected['products']
@@ -331,9 +357,12 @@ def select_profile(task, profile_id=None):
         if set(task['acceptance']['required_checks']) - available_checks(task)
         else 'supported'
     )
+    # Hash the full profile-bound definition after all input, output, and acceptance changes.
     task['task_hash'] = stable_hash(task)
     return task
 
 
 def _unknown(task_id):
+    """Raise the public unknown-task error for the requested ID."""
+
     raise ValueError('Unknown task ID: ' + str(task_id))

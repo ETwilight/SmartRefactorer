@@ -1,9 +1,13 @@
-"""Fixed inventory batch acceptance, independent of machine layout."""
+"""Measure fixed bucket batches in the evaluator player's inventory."""
 
 
 def measure_bucket_batch(
     task, product, actor, call, region, check, report, tick_mode, sprint_wait, natural_wait
 ):
+    """Initialize a 36-bucket batch, measure its completion, and append acceptance checks and
+    production metrics to report.
+    """
+
     initial = call('fake_player.bucket_batch', {'id': actor, 'product': product})
     if (
         initial.get('version') != 'fake-inventory-v1'
@@ -17,6 +21,7 @@ def measure_bucket_batch(
         raise ValueError('Bucket batch must begin with exactly 36 single empty buckets')
     start = call('clock.query')['tick']
     limit = task['measurement']['window_ticks']
+    # state: dict containing the latest player inventory and native bucket-batch status.
     state = initial
     while True:
         details = state.get('batch', {})
@@ -24,6 +29,7 @@ def measure_bucket_batch(
             raise RuntimeError('Bucket batch telemetry unavailable')
         if details.get('error'):
             raise ValueError(details['error'])
+        # elapsed is actual server ticks since the initialized batch's first clock sample.
         elapsed = call('clock.query')['tick'] - start
         if details.get('complete') or elapsed >= limit:
             break

@@ -15,17 +15,33 @@ import research.agent.CookingLedger;
 import java.util.*;
 
 @Mixin(value=BrewingStandBlockEntity.class,remap=false)
+/**
+ * Observe brewing fuel and completed bottle transformations for CookingLedger.
+ *
+ * The fuel callback samples the fuel stack before its decrement. A thread-local
+ * copy retains bottle and ingredient slots across doBrew; the return callback
+ * records changed bottles, one consumed ingredient, and its container remainder.
+ *
+ * <pre>{@code
+ * Map<String, Object> sample = CookingLedger.read(world, min, max);
+ * }</pre>
+ * The sample includes the cumulative brewing transaction counts at the stand position.
+ */
 public abstract class BrewingObservationMixin {
     @Unique private static final ThreadLocal<List<ItemStack>> techmc_before=new ThreadLocal<>();
     @Inject(method="serverTick",at=@At(value="INVOKE",target="Lnet/minecraft/world/item/ItemStack;shrink(I)V",ordinal=0),require=1)
+    /** Record the fuel item at its vanilla consumption point. */
     private static void techmc_fuel(Level level,BlockPos pos,BlockState state,BrewingStandBlockEntity entity,CallbackInfo ci) {
         if(level instanceof ServerLevel world)CookingLedger.fuel(world,pos,entity.getItem(4));
     }
     @Inject(method="doBrew",at=@At("HEAD"),require=1)
+    /** Copy the three bottle slots and ingredient slot before brewing. */
     private static void techmc_before(Level level,BlockPos pos,NonNullList<ItemStack> items,CallbackInfo ci) {
+        // Copy ItemStacks so vanilla mutations leave the saved before-state intact.
         techmc_before.set(items.subList(0,4).stream().map(ItemStack::copy).toList());
     }
     @Inject(method="doBrew",at=@At("RETURN"),require=1)
+    /** Compare copied bottle components and record the completed ingredient transaction. */
     private static void techmc_after(Level level,BlockPos pos,NonNullList<ItemStack> items,CallbackInfo ci) {
         var before=techmc_before.get();techmc_before.remove();
         if(!(level instanceof ServerLevel world)||before==null)return;

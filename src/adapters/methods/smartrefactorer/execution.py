@@ -1,8 +1,4 @@
-"""Translate framework requests and original receipts to the confirmed backend.
-
-No model calls or task-policy implementation live here. Execution completion,
-unknown operation status and independent task acceptance remain distinct.
-"""
+"""Exchange candidate requests and feedback, run fixtures, and record invocation outcomes."""
 
 import json
 from jsonschema import Draft202012Validator, ValidationError, SchemaError
@@ -20,9 +16,36 @@ from algorithms.smartrefactorer.execution.executor import Program, snapshot
 
 
 class ExecutionBridge:
-    """Drive live code, preserve raw feedback, and retain facts on process loss."""
+    """Connect a candidate Program to the runner's public request loop.
+
+    controller stores the candidate and execution records. recorder receives event
+    history, environment handles public calls, and directory is the method-state
+    Path used for generated execution files. persist and guard are the run callbacks.
+
+    program is the attached Program or None. program_stream() consumes its events until a
+    request or final outcome is reached. A request is saved in the checkpoint and
+    yielded to the runner. on_feedback() matches its receipt and delivers the result
+    to the program or a saved instruction frame. feedback contains adapter notices
+    for the current decision.
+
+    run_fixture() follows the same event exchange using recorded request feedback.
+    An accepted task evaluation passes its receipt to the controller for publication.
+
+    Example, after development has checked the candidate::
+
+        bridge = adapter.execution
+        bridge.start_program(component_id, arguments)
+        for request in bridge.program_stream():
+            feedback = environment.handle(request)
+            bridge.on_feedback(request, feedback)
+
+    This handles the next request boundary. The runner records the exchange and
+    enters the stream again to continue the invocation or collect its final outcome.
+    """
 
     def __init__(self, controller, recorder, environment, directory, save, guard):
+        """Keep the controller, run services, and execution directory."""
+
         self.controller = controller
         self.recorder = recorder
         self.environment = environment
@@ -33,9 +56,9 @@ class ExecutionBridge:
         self.feedback = []
 
     def run_fixture(self, components, component_id, arguments, receipts=()):
-        """Run a complete callable with fixture feedback and the runner cancellation guard; never dispatch the environment."""
-        # Fixtures consume requests, result and original exceptions. Creating
-        # discarded call/local snapshots makes ordinary mutable mocks quadratic.
+        """Return the Python result and consumed recorded interactions from a fixture run."""
+        # Fixtures record requests, results, and exceptions. Skip call/local
+        # snapshots to avoid copying growing mutable mocks at every trace event.
         program = Program(
             components,
             component_id,
@@ -74,7 +97,8 @@ class ExecutionBridge:
             program.thread.join(timeout=0.5)
 
     def program_stream(self):
-        """Persist requests before dispatch and pass function/exception events to the controller."""
+        """Yield the next Program request, or record its final outcome."""
+        # state: CheckpointView, the dictionary linked to the controller's AlgorithmState.
         state = self.controller.s
         if self.program is None:
             raise RunStopped(
@@ -84,6 +108,8 @@ class ExecutionBridge:
         while True:
             self.guard()
             try:
+                # event: dict with a kind tag; request, completed, and exception carry different
+                # payloads.
                 event = self.program.events.get(timeout=0.1)
             except queue.Empty:
                 continue
@@ -93,9 +119,8 @@ class ExecutionBridge:
                 request = copy.deepcopy(event['request'])
                 request.setdefault('protocol_version', '1.0')
                 request.setdefault('request_id', str(uuid.uuid4()))
-                # The host admits public operations and owns lifecycle state.
-                # A callable receives the same capability as the coordinator;
-                # silently synthesizing failures here contradicts that contract.
+                # Forward public calls through the host's operation admission
+                # and lifecycle rules.
                 state['pending'] = {
                     'request': request,
                     'candidate_hash': state['executed_candidate_hash'],
@@ -128,7 +153,7 @@ class ExecutionBridge:
             self.persist()
 
     def request_stream(self, requests, context):
-        """Translate public requests and legacy/new execution drives without changing raw results."""
+        """Expand execution-driving decisions and yield their public requests."""
         s = self.controller.s
         for request in requests:
             if request.get('op') == 'smartrefactorer.execute':
@@ -294,7 +319,7 @@ class ExecutionBridge:
             )
 
     def on_feedback(self, request, feedback):
-        """Retain original receipts before status handling; only independent acceptance permits publication."""
+        """Match a receipt, advance its waiting invocation, and process task evaluations."""
         s = self.controller.s
         pending = s.get('pending')
         if (
@@ -320,6 +345,7 @@ class ExecutionBridge:
             pending['receipt'] = copy.deepcopy(feedback)
             self.persist()
             try:
+                # state: str | None, the operation execution status extracted from this receipt.
                 state = execution_state(feedback, request=request)
             except ValueError as exc:
                 raise RunStopped(
@@ -389,7 +415,7 @@ class ExecutionBridge:
                 self.persist()
 
     def on_round_end(self, record):
-        """Cancel live waiting code and retain interruption facts without serializing a Python stack."""
+        """Cancel the live wait and save the interrupted invocation and pending request."""
         if self.program is not None:
             self.program.cancel()
             self.controller.s['python_execution']['status'] = 'interrupted'
@@ -402,6 +428,8 @@ class ExecutionBridge:
         self.persist()
 
     def drive_decision(self, legacy=False, report=None):
+        """Build the internal request used to advance the selected execution backend."""
+
         operation = 'smartrefactorer.step' if legacy else 'smartrefactorer.execute'
         return {
             'decision': 'request',
@@ -415,7 +443,7 @@ class ExecutionBridge:
         }
 
     def start_program(self, component_id, arguments, continuation_of=None, invocation_id=None):
-        """The controller admits source/input; this adapter starts the confirmed backend."""
+        """Record a checked invocation, save it, and start its Python worker."""
         if self.program is not None:
             raise RunStopped('pending_request_unresolved', 'An invocation is already alive')
         invocation_id = invocation_id or str(uuid.uuid4())
@@ -433,7 +461,7 @@ class ExecutionBridge:
         self.recorder.event('smartrefactorer.program.start', execution=copy.deepcopy(execution))
 
     def start_entry(self, entry, public, read_evidence):
-        """Resolve declared input and choose the new backend or historical cursor compatibility."""
+        """Resolve task-entry arguments and initialize the component's execution backend."""
         state = self.controller.state
         component_id = entry['component_id']
         if state.candidate[component_id].get('language') == python_backend.PROFILE:
@@ -446,6 +474,8 @@ class ExecutionBridge:
                     'report': 'Candidate changes saved. Retained execution facts require an explicit continuation invocation.',
                 }
             invocation_id = str(uuid.uuid4())
+            # arguments: JSON value after replacing the task entry's public and evidence
+            # references.
             arguments = resolve_arguments(
                 entry.get('argument_bindings', {}),
                 {
@@ -500,6 +530,8 @@ class ExecutionBridge:
             execution.suspended_legacy = None
         else:
             invocation_id = str(uuid.uuid4())
+            # arguments: JSON value after replacing the task entry's public and evidence
+            # references.
             arguments = resolve_arguments(
                 entry.get('argument_bindings', {}),
                 {

@@ -2,12 +2,24 @@ package research.agent;
 
 import java.util.*;
 
-/** Independent of chat text; every command including execute run is checked again at the server. */
+/**
+ * Validate commands exposed by the server bridge.
+ *
+ * The policy tokenizes quoted and nested data as single arguments, checks the
+ * command root and supported subcommands, and recursively checks execute run.
+ * Natural-world validation also checks supplied block and entity data for protected
+ * source blocks. The returned command has its optional leading slash removed.
+ *
+ * <pre>{@code
+ * String command = CommandPolicy.validate("tick query", naturalWorld);
+ * }</pre>
+ * The server passes this validated text to its command dispatcher.
+ */
 public final class CommandPolicy {
     private static final Set<String> ALLOWED = Set.of("tp", "teleport", "kill", "tick", "weather", "time", "effect", "give", "setblock", "fill", "execute", "data", "forceload", "summon", "clone", "clear", "item", "gamemode", "difficulty", "gamerule", "tag", "scoreboard", "help", "locate");
-    // The 26.1 wither_immune tag contains these unavailable source/containment
-    // blocks. Vanilla world/portal generation is never routed through this
-    // command or BlockItem policy. Ordinary piston motion also remains vanilla.
+    // Protected IDs cover source and containment blocks unavailable through ordinary acquisition.
+
+
     private static final Set<String> PROTECTED_NATURAL_SOURCES = Set.of(
         "minecraft:barrier", "minecraft:bedrock", "minecraft:end_portal",
         "minecraft:end_portal_frame", "minecraft:end_gateway", "minecraft:command_block",
@@ -15,14 +27,17 @@ public final class CommandPolicy {
         "minecraft:structure_block", "minecraft:jigsaw", "minecraft:moving_piston",
         "minecraft:light", "minecraft:reinforced_deepslate", "minecraft:test_block",
         "minecraft:test_instance_block", "minecraft:budding_amethyst", "minecraft:structure_void");
+    /** Normalize a block ID and check the protected-source set. */
     public static boolean isProtectedNaturalSource(String block) {
         if(block==null)return false;
         String id=block.toLowerCase(Locale.ROOT);
         if(!id.contains(":"))id="minecraft:"+id;
         return PROTECTED_NATURAL_SOURCES.contains(id);
     }
+    /** Split command arguments while retaining quoted strings and nested data. */
     public static List<String> tokens(String text) {
         List<String> out = new ArrayList<>(); StringBuilder current = new StringBuilder();
+        // quote is the active quote character or zero; depth counts nested data delimiters.
         char quote = 0; boolean escaped = false; int depth = 0;
         for (char c : text.toCharArray()) {
             if (c == '\n' || c == '\r' || c == '\0') throw new IllegalArgumentException("Multiple commands forbidden");
@@ -44,13 +59,15 @@ public final class CommandPolicy {
         if (!current.isEmpty()) out.add(current.toString());
         return out;
     }
+    /** Validate a command using the default world policy. */
     public static String validate(String command) {
         return validate(command,false);
     }
+    /** Validate syntax and command policy, then apply natural-source restrictions when requested. */
     public static String validate(String command,boolean naturalWorld) {
         String text = command.startsWith("/") ? command.substring(1) : command;
         if (text.length() > 32767) throw new IllegalArgumentException("Command too long");
-        // Preserve ordinary block/entity data; block active executable payloads, including encoded JSON command actions.
+        // Check executable payload markers before splitting the command into arguments.
         String normalized = text.toLowerCase(Locale.ROOT).replace("\\", "");
         if(text.contains("\\u") || text.contains("\\U")) throw new SecurityException("Unicode-escaped executable payloads require explicit decoding before validation");
         for (String term : List.of("command_block", "commandblock", "command:", "command\":", "command':", "run_command", "click_event", "clickevent", "minecraft:function")) {
@@ -61,9 +78,11 @@ public final class CommandPolicy {
         if(naturalWorld)validateNaturalSources(words);
         return text;
     }
+    /** Inspect the supplied item, block, or entity payload, descending through execute run. */
     private static void validateNaturalSources(List<String> words) {
         String root=words.getFirst().replaceFirst("^minecraft:","");
         if(root.equals("execute")){validateNaturalSources(words.subList(words.indexOf("run")+1,words.size()));return;}
+        // The payload argument position depends on the command root.
         int first=switch(root){case "setblock"->4;case "fill"->7;case "give"->2;case "item"->words.indexOf("with")+1;case "summon"->1;default->-1;};
         if(first<0||first>=words.size())return;
         String destination=root.equals("summon")?String.join(" ",words.subList(first,words.size())):words.get(first);
@@ -73,6 +92,7 @@ public final class CommandPolicy {
                 throw new SecurityException("Protected natural source or unavailable containment blocks cannot be created or supplied: "+protectedId);
         }
     }
+    /** Check one command root and recursively validate its execute run branch. */
     private static void validateTokens(List<String> words, int nesting) {
         if (words.isEmpty() || nesting > 16) throw new IllegalArgumentException("Empty or deeply nested command");
         String root = words.getFirst();
@@ -93,18 +113,21 @@ public final class CommandPolicy {
             if (run < 0) throw new SecurityException("execute requires an explicit run branch");
             if (words.subList(0, run).contains("function")) throw new SecurityException("execute function conditions invoke datapack code");
             if (words.subList(run+1,words.size()).stream().anyMatch(w->w.equals("clone")||w.equals("minecraft:clone"))) throw new SecurityException("Use direct clone with explicit context so its source can be inspected");
-            // execute store can otherwise mutate executable command-block data.
+            // execute store block can write executable command-block data.
             if (words.subList(0, run).contains("store") && words.subList(0, run).contains("block")) throw new SecurityException("execute store block disabled");
             validateTokens(words.subList(run + 1, words.size()), nesting + 1);
         }
     }
+    /** Return the exposed command roots. */
     public static Set<String> allowed() { return ALLOWED; }
+    /** Return the public subcommand and payload policy description. */
     public static Map<String,Object> description() {
         return Map.of("data",List.of("get"),"item",List.of("replace"),"locate",List.of("biome","structure"),
             "tick",List.of("query","freeze","unfreeze","step","rate","sprint"),
             "execute","Explicit run required; no function conditions, store block, or nested clone. All run branches are revalidated.",
             "payloads","Executable/custom-code payloads and Unicode-escaped commands are rejected");
     }
+    /** Check whether a partial command path belongs to the exposed help tree. */
     public static boolean helpPathAllowed(List<String> path) {
         if(path.isEmpty())return true;
         String root=path.getFirst().replaceFirst("^minecraft:","");

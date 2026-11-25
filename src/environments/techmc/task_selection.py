@@ -1,4 +1,6 @@
-"""Immutable environment task selection, shared by every workflow on a port."""
+"""Normalize a session's task selection and resolve the selection configured for its server
+port.
+"""
 
 import copy
 import json
@@ -11,7 +13,31 @@ else:
 
 
 class TaskSelection:
+    """Snapshot the published task definitions selected for one environment session.
+
+    selection accepts core, all, one difficulty, a list of difficulties or task
+    IDs, or a selection dictionary. world_type optionally restricts the selected
+    tasks to void or natural worlds. spec stores the normalized dictionary;
+    _tasks is a catalogue-ordered list of task dictionaries and _by_id maps IDs
+    to those definitions. Public readers return copies of the selected tasks.
+
+    catalogue_count is the size of the full catalogue. selection_hash identifies
+    both the normalized selection and its selected task IDs and definition
+    hashes. metadata exposes these values with the selected task count.
+
+    Example:
+        selection = TaskSelection('core', world_type='void')
+        tasks = selection.tasks()
+
+    tasks contains copied core task definitions for void worlds. A TaskStream
+    can use this selection to define the arrival order of individual visits.
+    """
+
     def __init__(self, selection=None, world_type=None):
+        """Normalize the selector, apply world restrictions, and index the selected task
+        definitions.
+        """
+
         catalogue = list_tasks()
         known = {t['id']: t for t in catalogue}
         if isinstance(selection, dict):
@@ -33,10 +59,13 @@ class TaskSelection:
                 ).read_text(encoding='utf-8')
             )
         if selection == 'all':
+            # selection changes from the string all to its normalized selection dictionary.
             selection = {'mode': 'all'}
         elif isinstance(selection, str):
+            # selection changes from a difficulty string to a difficulties dictionary.
             selection = {'difficulties': [selection]}
         elif isinstance(selection, list):
+            # selection changes from a list to a dictionary selecting difficulties or task IDs.
             selection = (
                 {'difficulties': selection}
                 if all(x in DIFFICULTIES for x in selection)
@@ -73,6 +102,7 @@ class TaskSelection:
                 or any(not isinstance(x, str) or x not in known for x in ids)
             ):
                 raise ValueError('task_ids must be a nonempty list of published task IDs')
+            # Keep catalogue order here; TaskStream defines explicit arrival order separately.
             selected = [t for t in catalogue if t['id'] in ids]
             spec = {'mode': mode, 'task_ids': [t['id'] for t in selected]}
         else:
@@ -86,6 +116,7 @@ class TaskSelection:
             spec['world_type'] = world_type
         self.spec = spec
         self._tasks = selected
+        # _by_id: dict[str, dict], indexing the selected task definitions by public ID.
         self._by_id = {t['id']: t for t in selected}
         self.catalogue_count = len(catalogue)
         self.selection_hash = stable_hash(
@@ -96,6 +127,10 @@ class TaskSelection:
         )
 
     def tasks(self, difficulty=None, world_type=None):
+        """Return copied selected tasks matching the optional difficulty and world-type
+        filters.
+        """
+
         if difficulty is not None and difficulty not in DIFFICULTIES:
             raise ValueError('Unknown difficulty: ' + str(difficulty))
         if world_type is not None and world_type not in ('void', 'natural'):
@@ -110,6 +145,8 @@ class TaskSelection:
         )
 
     def require(self, task_id):
+        """Raise when a task ID is absent from this selection."""
+
         if not isinstance(task_id, str) or task_id not in self._by_id:
             raise ValueError(
                 'Task is unknown or outside the active environment task selection: '
@@ -117,11 +154,15 @@ class TaskSelection:
             )
 
     def get(self, task_id):
+        """Return a copy of one selected task definition."""
+
         self.require(task_id)
         return copy.deepcopy(self._by_id[task_id])
 
     @property
     def metadata(self):
+        """Return the normalized selection, task counts, and selection hash."""
+
         return {
             **copy.deepcopy(self.spec),
             'task_count': len(self._tasks),
@@ -132,9 +173,12 @@ class TaskSelection:
 
 
 def managed_selection(root, port):
-    """Read the selected local/SSH managed server; no game mutation."""
+    """Return the task-selection specification and source label for the managed server at
+    this port.
+    """
     if port is None:
         return None, 'default'
+    # port becomes int after accepting the caller's string or numeric port value.
     port = int(port)
     if not 1 <= port <= 65535:
         raise ValueError('Invalid task selection server port')
@@ -167,6 +211,8 @@ def managed_selection(root, port):
 
 
 def add_selection_arguments(parser):
+    """Add mutually exclusive catalogue, task-ID, and selection-file CLI options."""
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         '--task-list',
@@ -183,6 +229,8 @@ def add_selection_arguments(parser):
 
 
 def selection_from_args(args):
+    """Read the requested CLI task selector or JSON file, returning None when unspecified."""
+
     levels = getattr(args, 'task_list', None)
     if levels:
         if 'core' in levels:
@@ -202,6 +250,7 @@ def selection_from_args(args):
         value = Path(path).read_bytes()
         if len(value) > 65536:
             raise ValueError('Task selection file exceeds 64 KiB')
+        # value: bytes from the selection file; result is its decoded JSON selector.
         result = json.loads(value.decode('utf-8-sig'))
         if result is None:
             raise ValueError('Task selection file must specify all, difficulties, or task_ids')

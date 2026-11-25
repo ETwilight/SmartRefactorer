@@ -1,7 +1,4 @@
-"""Read-only verification for explicitly continuing a saved MC experiment.
-
-This is a trusted launcher boundary, never an agent RPC or a fresh-world fallback.
-"""
+"""Verify retained task, session, and world bindings for explicit experiment continuation."""
 
 import hashlib
 import hmac
@@ -23,6 +20,14 @@ from .task_stream import TaskStream
 
 
 def resume_descriptor(source, *, root, method='baseline', recovery_receipt=None):
+    """Build a verified descriptor for a saved baseline or PSN experiment.
+
+    Match archived session files to live records, rebuild stream arrivals, and
+    recover the current task visit. Check its profile, logical workspace, physical
+    world, and host identity. Include a verified recovery approval or unstarted
+    recovery receipt when supplied for the stopped checkpoint.
+    """
+
     source = Path(source)
     if not source.is_absolute():
         raise ValueError('Explicit resume requires an absolute run directory')
@@ -32,6 +37,7 @@ def resume_descriptor(source, *, root, method='baseline', recovery_receipt=None)
     workflow = {'baseline': 'agent_baseline', 'psn': 'psn_compare'}.get(method)
     if workflow is None or report.get('workflow') != workflow:
         raise ValueError('Explicit checkpoint belongs to a different method')
+    # approval becomes a verified recovery dict for a stopped unresolved passive wait.
     approval = None
     if report.get('status') == 'pending_request_unresolved':
         if recovery_receipt is None:
@@ -96,7 +102,7 @@ def resume_descriptor(source, *, root, method='baseline', recovery_receipt=None)
     worlds = _read_json_retry(live / 'task-worlds.json')
     selection = TaskSelection(manager['task_selection'], world_type=manager['world_type'])
     manifest = stream_state['manifest']
-    # Construction without a state path performs no writes.
+    # Rebuild the stream manifest in memory by omitting a state path.
     stream = TaskStream(
         selection,
         sequence=manifest['sequence'],
@@ -113,6 +119,7 @@ def resume_descriptor(source, *, root, method='baseline', recovery_receipt=None)
         or position < 0
     ):
         raise ValueError('Invalid original stream position')
+    # Deferred outcomes append another arrival; position counts task deliveries.
     arrivals = list(manifest['task_ids'])
     for index, entry in enumerate(history):
         if (
@@ -140,6 +147,7 @@ def resume_descriptor(source, *, root, method='baseline', recovery_receipt=None)
                 candidates.append(value)
     if len(candidates) != 1:
         raise ValueError('Original visit has no unique task instance')
+    # The unique task.start result identifies this stream visit's task-instance dict.
     value = candidates[0]
     instance = _read_json_retry(root / 'runs/task-instances' / (value['id'] + '.json'))
     for key in (
@@ -224,6 +232,7 @@ def resume_descriptor(source, *, root, method='baseline', recovery_receipt=None)
         or state['server_bridge'] != instance['server_bridge']
     ):
         raise ValueError('Original session/host identity mismatch')
+    # Bind the logical task visit to its physical world and original session.
     binding = {
         'verified': True,
         'task_id': task_id,
@@ -267,22 +276,30 @@ def resume_descriptor(source, *, root, method='baseline', recovery_receipt=None)
 
 
 def baseline_descriptor(source, *, root, recovery_receipt=None):
+    """Build the explicit continuation descriptor for a baseline run."""
+
     return resume_descriptor(
         source, root=root, method='baseline', recovery_receipt=recovery_receipt
     )
 
 
 def psn_descriptor(source, *, root, recovery_receipt=None):
+    """Build the explicit continuation descriptor for a PSN run."""
+
     return resume_descriptor(source, root=root, method='psn', recovery_receipt=recovery_receipt)
 
 
 def _signed_bytes(value):
+    """Serialize a receipt body as canonical UTF-8 JSON for its owner HMAC."""
+
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
         'utf-8'
     )
 
 
 def _owner(root, experiment_id):
+    """Read the experiment owner token and return its folder, token, and SHA256 identity."""
+
     folder = Path(root) / 'runtime/experiments' / experiment_id
     token = (folder / 'owner.token').read_text(encoding='utf-8').strip()
     if not token:
@@ -291,6 +308,8 @@ def _owner(root, experiment_id):
 
 
 def verify_unstarted_recovery(path, descriptor, *, root):
+    """Verify an unstarted-attempt receipt against its checkpoint and saved evidence hashes."""
+
     receipt = _read_json_retry(path)
     body = {k: v for k, v in receipt.items() if k != 'owner_hmac_sha256'}
     _, token, owner = _owner(root, descriptor['experiment_id'])
@@ -323,10 +342,11 @@ def verify_unstarted_recovery(path, descriptor, *, root):
 
 
 def create_unstarted_recovery(source_run, failed_run, output_path, *, root):
-    """Sign a new zero-paid recovery receipt; never edit historical documents.
+    """Sign recovery evidence for a baseline resume that stopped before method startup.
 
-    The world must already have been saved/stopped and its lease explicitly
-    released by its owner. This function performs no physical lifecycle action.
+    Check the zero-charge allocation record, saved shutdown, released ownership,
+    and unchanged world mapping. Write a new manager snapshot and signed receipt
+    that bind the failed attempt to its original checkpoint.
     """
     root = Path(root).resolve()
     failed_run = Path(failed_run).resolve()
@@ -371,6 +391,7 @@ def create_unstarted_recovery(source_run, failed_run, output_path, *, root):
             for p in (failed_run / name).rglob('*')
         ):
             raise ValueError('Failed attempt contains method/accounting evidence')
+        # Keep the manager's original bytes for its hash and immutable recovery snapshot.
         original = (folder / 'manager.json').read_bytes()
         manager = json.loads(original)
         if (

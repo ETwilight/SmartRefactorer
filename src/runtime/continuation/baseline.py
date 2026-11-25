@@ -1,6 +1,5 @@
-"""Explicit Baseline continuation from complete, clean stopped evidence.
-
-No environment calls, model calls, source mutation, or guessed world recovery.
+"""Load Baseline continuation state, restore cumulative accounting, and copy referenced
+context files.
 """
 
 import copy
@@ -14,8 +13,17 @@ from runtime.feedback_semantics import is_uncertain
 
 
 def load_continuation(source, *, readonly=None):
+    """Load and validate a stopped Baseline run, returning its continuation state dictionary.
+
+    Use the saved checkpoint when present, otherwise reconstruct memory from
+    the last model input and subsequent recorded decisions. Include the original
+    report, calls, selected task, and unexecuted tail of the last request batch.
+    """
+
     source = Path(source).resolve()
     raw = (source / 'report.json').read_bytes()
+    # raw: bytes; report is the decoded dictionary checked for Baseline workflow and stopped
+    # status.
     report = json.loads(raw)
     if report.get('workflow') != 'agent_baseline' or report.get('status') not in (
         'operator_stop',
@@ -100,11 +108,14 @@ def load_continuation(source, *, readonly=None):
                 continue
             contents = message.get('content', [])
             if isinstance(contents, str):
+                # contents changes from a string to a list of message-part dictionaries.
                 contents = [{'text': contents}]
             for part in contents:
                 if not isinstance(part, dict) or not isinstance(part.get('text'), str):
                     continue
                 try:
+                    # value: decoded JSON; a dictionary containing history supplies the saved
+                    # model context.
                     value = decode(part['text'])
                 except (ValueError, KeyError, TypeError):
                     continue
@@ -132,8 +143,8 @@ def load_continuation(source, *, readonly=None):
             }
             for cid in step.get('calls', []):
                 call = call_map[cid]
-                # The newest paid decision's results have not appeared in another
-                # provider input. Selected views must be retained explicitly.
+                # Later decisions may have feedback absent from the last recorded model input.
+                # Restore their recorded presentation views alongside the original request.
                 feedback = call.get('response_view')
                 if feedback is None:
                     options = call['request'].get('response') or {}
@@ -167,7 +178,10 @@ def load_continuation(source, *, readonly=None):
     if last.get('steps'):
         step = last['steps'][-1]
         if step['decision']['decision'] == 'request' and not step.get('stop_reason'):
+            # planned: dict | list, decoded from the last request decision.
             planned = json.loads(step['decision']['request_json'])
+            # Normalize a single request object into list[dict] before selecting its unexecuted
+            # tail.
             planned = [planned] if isinstance(planned, dict) else planned
             completed = len(step.get('calls', []))
             if completed < len(planned):
@@ -187,6 +201,10 @@ def load_continuation(source, *, readonly=None):
 
 
 def restore_recorder(recorder, state):
+    """Restore carried calls, usage, active task, and the interrupted round's accumulated
+    timing.
+    """
+
     recorder.models = copy.deepcopy(state['models'])
     recorder.env_calls = copy.deepcopy(state['env_calls'])
     recorder.charged = state['report']['token_usage']['charged_tokens']
@@ -231,6 +249,8 @@ def restore_recorder(recorder, state):
 
 
 def copy_context_sources(source, destination):
+    """Verify and copy content-addressed context JSON files, returning the number found."""
+
     source = Path(source) / 'method/artifacts/context'
     destination = Path(destination) / 'method/artifacts/context'
     if not source.is_dir():

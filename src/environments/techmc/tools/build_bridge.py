@@ -1,4 +1,4 @@
-"""Compile directly against official un-obfuscated jars, using only project JDK."""
+"""Compile the TechMC bridge against installed Minecraft and Fabric JARs."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -19,7 +19,16 @@ from environments.techmc.tools.bootstrap import (
 )
 
 
+from environments.techmc.paths import ASSET_ROOT
+
+
 def build():
+    """Compile Java sources, package bridge resources, and record source and JAR hashes.
+
+    The configured JDK supplies javac. Installed libraries form its classpath;
+    an argument file carries paths containing spaces into the compiler.
+    """
+
     java = Path(json.loads((ROOT / 'runtime/java.json').read_text())['java'])
     loader = json.loads((ROOT / 'runtime/fabric-loader.json').read_text())['loader']['version']
     loader_jar = download(
@@ -30,6 +39,7 @@ def build():
     api = next(m for m in mods if m['project'] == 'fabric-api')
     extract_safe(api['file'], ROOT / 'runtime/fabric-api')
     libraries = list((MC / 'libraries').rglob('*.jar')) + [loader_jar, MC / 'jars/client.jar']
+    # Fabric API exposes modules as nested JARs; javac needs those entries explicitly.
     libraries += list((ROOT / 'runtime/fabric-api/META-INF/jars').glob('*.jar'))
     libraries += [Path(m['file']) for m in mods]
     libraries += list(
@@ -37,10 +47,10 @@ def build():
             '*.jar'
         )
     )
-    build = ROOT / 'bridge/build'
+    build = ASSET_ROOT / 'bridge/build'
     classes = build / 'classes'
     classes.mkdir(parents=True, exist_ok=True)
-    sources = sorted((ROOT / 'bridge/src').rglob('*.java'))
+    sources = sorted((ASSET_ROOT / 'bridge/src').rglob('*.java'))
     args = [
         '--release',
         '25',
@@ -57,14 +67,14 @@ def build():
         '\n'.join('"' + a.replace('\\', '/') + '"' for a in args), encoding='utf-8'
     )
     subprocess.run([str(java.with_name('javac.exe')), '@' + str(argfile)], check=True)
-    for resource in (ROOT / 'bridge/resources').rglob('*'):
+    for resource in (ASSET_ROOT / 'bridge/resources').rglob('*'):
         if resource.is_file():
-            target = classes / resource.relative_to(ROOT / 'bridge/resources')
+            target = classes / resource.relative_to(ASSET_ROOT / 'bridge/resources')
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(resource.read_bytes())
     jar = build / 'minecraft-agent-26.1.jar'
-    # zipfile writes within the workspace; JDK jar's temp-then-move crosses
-    # Windows AppContainer boundaries and fails under a restricted workspace.
+    # Package directly in the workspace. The JDK jar tool uses a temporary path
+    # whose final move can cross Windows AppContainer boundaries.
     with zipfile.ZipFile(jar, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(classes.rglob('*')):
             if path.is_file():
@@ -75,7 +85,7 @@ def build():
             'java': str(java),
             'minecraft': '26.1',
             'jar_sha256': digest(jar),
-            'sources': {str(p.relative_to(ROOT)): digest(p) for p in sources},
+            'sources': {str(p.relative_to(ASSET_ROOT)): digest(p) for p in sources},
             'compiled': True,
         },
     )

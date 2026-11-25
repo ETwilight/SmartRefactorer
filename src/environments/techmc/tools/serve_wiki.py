@@ -1,4 +1,4 @@
-"""Loopback-only, fully offline ZIM browser/search; no Wiki API requests."""
+"""Serve the installed offline Wiki archive on a loopback HTTP port."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -16,11 +16,27 @@ from environments.techmc.adapters.knowledge import ZimWiki
 
 
 def main(port=8877):
+    """Open the archive and serve its search results and assets until interrupted."""
+
     wiki = ZimWiki()
     lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
+        """Serve archive search and entry requests using the enclosing Wiki reader.
+
+        The shared lock serializes searches against that reader. Each request selects
+        an HTML search response or an archive asset and its MIME type.
+
+        Example:
+            server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
+            server.serve_forever()
+
+        The server creates a handler for each browser connection to the local archive.
+        """
+
         def do_GET(self):
+            """Route the home page, search query, or archive entry and write its response."""
+
             url = urlsplit(self.path)
             try:
                 if url.path == '/':
@@ -51,6 +67,7 @@ def main(port=8877):
                     mime = 'text/html; charset=utf-8'
                 elif url.path.startswith('/wiki/'):
                     entry = unquote(url.path[6:])
+                    # body: bytes; mime: str supplied by the archive asset reader.
                     body, mime = wiki.asset(entry)
                 else:
                     self.send_error(404)
@@ -72,6 +89,8 @@ def main(port=8877):
                 self.send_error(404, 'Entry not in offline archive')
 
         def log_message(self, *args):
+            """Keep routine browser requests out of the launcher output."""
+
             pass
 
     server = ThreadingHTTPServer(('127.0.0.1', port), Handler)

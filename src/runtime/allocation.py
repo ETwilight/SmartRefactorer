@@ -1,4 +1,6 @@
-"""Generic admitted-worker lifecycle; method preflight and launch are injected."""
+"""Preflight a method, run its worker through the environment allocator, and save allocation
+results.
+"""
 
 import argparse
 import json
@@ -10,9 +12,13 @@ CAPACITY_EXIT = 75
 
 
 def capacity_error(exc):
+    """Recognize retryable capacity errors with records confirming the method never started
+    and resources were released.
+    """
+
     record = getattr(exc, 'allocation_record', {})
-    # Capacity cooldown can relaunch the worker. Only an explicitly unstarted
-    # allocation may enter it; a message alone cannot prove no actions occurred.
+    # Requeue only allocations recording an unstarted method and released resources.
+    # The error text then identifies the capacity condition.
     if record.get('method_started') is not False:
         return False
     accounting = record.get('method_accounting', {})
@@ -39,6 +45,10 @@ def capacity_error(exc):
 
 
 def main(argv=None, *, preflight, provider_for, worker_module, working_directory):
+    """Read launch configuration, allocate the worker, and return its exit code or the
+    capacity-wait code.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', required=True, type=Path)
     args = parser.parse_args(argv)

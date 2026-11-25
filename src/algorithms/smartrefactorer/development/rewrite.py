@@ -1,14 +1,15 @@
-"""Rewrite：按方案修改已有组件的源码、接口与契约。
+"""Rewrite an existing component as part of the coordinated proposal.
 
-输入包含目标版本、相关分析、诊断与整份协调方案；交付由 CodeGen 的
-apply_component 统一应用，后续进入 Validate。
+The current component must match the edit's expected source hash. Rewrite gets
+the same proposal and candidate context as CodeGen, then returns a delivery for
+apply_component to install.
 """
 
 from .codegen import edit_context
 
 
 def rewrite(controller, edit, public):
-    """Request a replacement for the proposal's exact existing source version."""
+    """Request a replacement for the component version named by this edit."""
     component = controller.state.candidate[edit['target']]
     if component['hash'] != edit['expected_hash']:
         raise ValueError('Stale rewrite source')

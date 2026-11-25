@@ -1,7 +1,8 @@
-"""CodeGen：按协调后的方案生成新组件并应用到候选版本。
+"""Generate missing components and apply delivered component versions.
 
-交付包含源码、接口、契约和目标版本；apply_component 更新候选及其依赖，
-随后由 controller 推进编辑游标与 Validate。
+Each delivery contains source, interface, contract, target ID, and expected
+source hash. Applying it updates the candidate and clears that component's
+analysis so the next analysis reflects the replacement.
 """
 
 import copy
@@ -17,7 +18,7 @@ INSTRUCTIONS = (
 
 
 def apply_component(controller, out, target, expected):
-    """Apply an exact-version delivery without altering the source text."""
+    """Check a delivery, parse its source, and replace the named candidate component."""
     state = controller.state
     if out.get('conflict'):
         raise ValueError('Interface conflict: ' + str(out['conflict']))
@@ -32,6 +33,7 @@ def apply_component(controller, out, target, expected):
     normal = bool(out['interface'].get('entrypoint'))
     backend = python_backend if normal else None
     (backend.parse if backend else parse)(out['source'])
+    # deps: dict with component call IDs, call-site IDs, and a dynamic-call flag.
     deps = backend.references(out['source'], target) if backend else references(out['source'])
     if normal:
         declared = out['interface'].get('dependencies', [])
@@ -51,12 +53,15 @@ def apply_component(controller, out, target, expected):
         'contract': out['contract'],
         'dependencies': deps['calls'],
     }
-    # 新源码替换旧版本后，该组件原有分析进入重新计算路径。
+    # The replacement changes the source version; refresh its dependency analysis on the next
+    # pass.
     state.component_analyses.pop(target, None)
 
 
 def edit_context(controller, edit, public):
-    """Keep code generation inputs bound to the full coordinated proposal."""
+    """Collect the edit, full proposal, reuse plan, candidate, and public task for
+    generation.
+    """
     state = controller.state
     return {
         'public': public,
@@ -69,7 +74,7 @@ def edit_context(controller, edit, public):
 
 
 def generate(controller, edit, public):
-    """Generate a new component, never overwrite an existing identity."""
+    """Request source and metadata for a component being added to the candidate."""
     if edit['target'] in controller.state.candidate:
         raise ValueError('Component name collision')
     return controller.operator('CodeGen', edit_context(controller, edit, public))

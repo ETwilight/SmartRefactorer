@@ -1,4 +1,4 @@
-"""Typed model turns with explicit reads; no dependency on a baseline or game."""
+"""Let structured model turns read skill definitions, traces, and environment knowledge."""
 
 import copy
 import json
@@ -8,13 +8,39 @@ from runtime.contracts import obj
 
 
 class PromptClient:
+    """Add evidence-reading turns to a method adapter's structured model client.
+
+    Subclasses supply ask(), the environment revision check, knowledge method
+    discovery and request construction, a knowledge_handler, and a recorder.
+    read_library() and read_trace() serve method evidence; an optional
+    read_context() enables content-ID and JSON Pointer reads. knowledge_calls
+    retains copies of knowledge-query call records for this client.
+
+    ask_with_knowledge() owns a local tool history, immutable-read cache, and
+    per-address feedback signatures. Successful immutable reads can reuse an
+    earlier history entry. Dynamic queries execute again. After two consecutive
+    results add no information, the next turn permits only the typed response.
+
+    Example, on an adapter implementing these hooks:
+        result = client.ask_with_knowledge(instructions, data, schema, scope='plan')
+
+    The model may request evidence before responding. result is the response
+    validated against schema; control then returns to the calling algorithm.
+    """
+
     knowledge_guide = 'Read the environment discovery for public knowledge interfaces.\n'
     environment_guide = 'Environment-owned guidance and observed feedback define task rules.\n'
 
     def __init__(self):
+        """Initialize the recorded knowledge-query call list."""
+
         self.knowledge_calls = []
 
     def query_knowledge(self, method, params, request_id=None):
+        """Check the source revision, execute a public knowledge request, and retain its call
+        record.
+        """
+
         self.check_environment_revision()
         if method not in self.knowledge_methods():
             raise ValueError('Unknown public knowledge method: ' + method)
@@ -26,18 +52,22 @@ class PromptClient:
         return copy.deepcopy(feedback)
 
     def ask_with_knowledge(self, instructions, data, schema, scope, max_queries=4, max_reads=4):
-        """Read evidence until a typed response, without repeated-evidence loops.
+        """Serve evidence turns until the model returns a schema-valid response.
 
-        Cache successful immutable reads only within this native invocation.
-        Dynamic queries still execute. Two consecutive results containing no new
-        information give one response-only completion back to the native caller;
-        this neither completes a task nor advances its round.
+        Count queries and uncached reads against their separate allowances. Store
+        duplicate results as references to earlier history entries. Return the
+        validated respond.response value, or raise if the turn allowance ends.
         """
         history = []
         queries = 0
         reads = 0
+        # read_cache: dict[tuple, int], mapping immutable read addresses to history positions.
         read_cache = {}
+        # seen_feedback: dict[tuple, int], mapping (address, feedback signature) to its first
+        # history position.
         seen_feedback = {}
+        # last_feedback: dict[tuple, str], retaining the latest feedback signature at each
+        # address.
         last_feedback = {}
         no_progress = 0
         duplicate_history = []
@@ -151,8 +181,8 @@ class PromptClient:
             cache_key = None
             cached = False
             no_information = False
-            # Parsing itself can fail. Give that failure a semantic address too,
-            # so repeating identical invalid input cannot bypass loop recovery.
+            # Use the turn itself as the initial evidence address, including parsing errors.
+            # A parsed query or read replaces this key with its specific address.
             progress_key = (
                 'turn',
                 json.dumps(
@@ -164,6 +194,8 @@ class PromptClient:
             )
             try:
                 if answer['decision'] == 'knowledge_query':
+                    # params: the JSON value decoded from params_json, usually a query parameter
+                    # dictionary.
                     params = json.loads(answer['params_json'])
                     progress_key = (
                         'query',
@@ -175,8 +207,8 @@ class PromptClient:
                     if max_queries is not None and queries >= max_queries:
                         raise ValueError('Knowledge query allowance exhausted')
                     queries += 1
-                    # A versioned document is immutable; status, searches and
-                    # other dynamic queries must always reach their handler.
+                    # Cache a document read when its parameters pin a content hash.
+                    # Status and search queries execute on every request.
                     if (
                         answer['method'] == 'environment.document'
                         and isinstance(params, dict)
@@ -191,6 +223,7 @@ class PromptClient:
                     if cache_key in read_cache:
                         cached = True
                         no_information = True
+                        # source: int, the history position supplying the cached feedback.
                         source = read_cache[cache_key]
                     else:
                         feedback = self.query_knowledge(
@@ -211,6 +244,7 @@ class PromptClient:
                     if cache_key in read_cache:
                         cached = True
                         no_information = True
+                        # source: int, the history position supplying the cached feedback.
                         source = read_cache[cache_key]
                     else:
                         if max_reads is not None and reads >= max_reads:
@@ -226,7 +260,7 @@ class PromptClient:
                             )
                         feedback = {'status': 'completed', 'result': result}
             except Exception as exc:
-                # Infrastructure guards must never be converted into model feedback.
+                # Propagate source revision changes to the runner.
                 if type(exc).__name__.endswith('RevisionChanged'):
                     raise
                 feedback = {
@@ -234,17 +268,18 @@ class PromptClient:
                     'error': {'type': type(exc).__name__, 'message': str(exc)},
                 }
             if not cached:
-                # Ignore only the outer RPC request ID. In particular, retain
-                # changing result/status/error and all other evidence fields.
+                # The outer request ID varies between otherwise identical feedback records.
+                # All result, status, and error fields remain part of the signature.
                 signature = json.dumps(
                     {k: v for k, v in feedback.items() if k != 'request_id'},
                     sort_keys=True,
                     separators=(',', ':'),
                     allow_nan=False,
                 )
-                # A fresh address is new evidence even when its value happens
-                # to equal another address. Dynamic results changing A/B/A also
-                # count as progress: compare against this query's last result.
+                # Compare each address with its last result to detect consecutive duplicates.
+                # A new address counts as progress even when another address returned the same
+                # value.
+                # A dynamic result changing from A to B and back to A also counts as progress.
                 if progress_key is not None:
                     no_information = last_feedback.get(progress_key) == signature
                     last_feedback[progress_key] = signature

@@ -1,3 +1,3 @@
-"""Workflow-neutral recording and deterministic, out-of-band progress audits."""
-from .recorder import RunRecorder, TokenBudgetExceeded
+"""Export shared run recording and token-budget exceptions."""
 
+from .recorder import RunRecorder, TokenBudgetExceeded

@@ -1,8 +1,7 @@
-"""Compose SmartRefactorer with observed models, evidence and host execution.
+"""Connect the SR controller to model calls, evidence storage, and run callbacks.
 
-This adapter translates framework callbacks. Algorithm phase transitions live
-in algorithms.smartrefactorer.controller, and resource/budget ownership stays
-with the host. Old checkpoint fields are retained by the explicit state codec.
+bind() loads the method checkpoint and creates the library, controller, model
+client, embeddings, execution bridge, and host coordinator for the current run.
 """
 
 import copy
@@ -23,7 +22,28 @@ from .model import OperatorClient
 
 
 class MethodAdapter:
-    """The framework's narrow policy interface, backed by composed responsibilities."""
+    """Supply the SR method interface used by the task runner.
+
+    resume is an optional source-run Path. environment supplies public requests and
+    knowledge reads. bind(folder, recorder) creates store under method/state and
+    loads the saved development dictionary before constructing the Controller.
+
+    controller holds algorithm state; coordinator selects the next run operation.
+    model handles operator calls, embeddings provides the retrieval vectors, and
+    evidence stores original feedback. execution exchanges live skill requests and
+    their receipts. These objects share the recorder and persistence callback.
+
+    The runner calls decide(), passes requests through request_stream(), and sends
+    completed feedback to on_feedback(). persist() writes the linked checkpoint.
+
+    Example, after the runner has allocated the environment and recorder::
+
+        adapter = MethodAdapter(environment=environment)
+        adapter.bind(folder, recorder)
+        decision = adapter.decide(context)
+
+    decision selects a public request, development, or execution for this task.
+    """
 
     compact_transport = False
     programmatic_continuation = True
@@ -39,6 +59,8 @@ class MethodAdapter:
         embedding_device='cpu',
         embedding_precision='float32'
     ):
+        """Keep the continuation source, environment, and embedding configuration."""
+
         self.resume = Path(resume) if resume else None
         self.environment = environment
         self.memory = ''
@@ -47,10 +69,14 @@ class MethodAdapter:
 
     @property
     def environment(self):
+        """Return the environment currently used by this method."""
+
         return self._environment
 
     @environment.setter
     def environment(self, value):
+        """Update the environment used by the model client and execution bridge."""
+
         self._environment = value
         if hasattr(self, 'model'):
             self.model.environment = value
@@ -58,6 +84,8 @@ class MethodAdapter:
             self.execution.environment = value
 
     def bind(self, folder, recorder):
+        """Load saved method state and construct the objects used for this run."""
+
         self.folder = Path(folder) / 'method/state'
         self.recorder = recorder
         self.store = self.folder / 'smartrefactorer'
@@ -67,6 +95,7 @@ class MethodAdapter:
             )
         self.library = Library(self.store / 'library')
         path = self.store / 'development.json'
+        # saved: dict | None, the serialized development state passed to the Controller.
         saved = json.loads(path.read_text(encoding='utf-8-sig')) if path.exists() else None
         self.evidence = EvidenceCatalog(self.store, recorder)
         self.embeddings = DenseEmbeddings(
@@ -86,6 +115,7 @@ class MethodAdapter:
             save=self.persist,
             archive_accepted_state=self.archive_accepted_state,
         )
+        # The model client's controller changes from None to this run's Controller.
         self.model.controller = self.controller
         self.evidence.controller = self.controller
         self.execution = ExecutionBridge(
@@ -97,7 +127,9 @@ class MethodAdapter:
         self.persist()
 
     def _restore_adapter_state(self, had_checkpoint):
-        """Compatibility checks operate on the live decoded state, never a stale input dict."""
+        """Restore saved invocation facts, context settings, and pending request feedback."""
+        # saved: CheckpointView, linked to AlgorithmState; writes here update the same live
+        # state.
         saved = self.controller.s
         if had_checkpoint and (
             saved.get('execution_profile') != PROFILE
@@ -196,19 +228,29 @@ class MethodAdapter:
                 self.recorder.verified_unstarted_method_request = None
 
     def persist(self):
+        """Write the current controller checkpoint to development.json."""
+
         if hasattr(self, 'controller'):
             atomic(self.store / 'development.json', self.controller.s)
 
     def guard(self):
+        """Call the recorder's configured run-limit check."""
+
         if self.recorder.model_guard:
             self.recorder.model_guard()
 
     def archive_accepted_state(self):
+        """Save the accepted task development state and return its file path."""
+
         path = self.store / 'accepted-task-development.json'
         atomic(path, self.controller.s)
         return str(path)
 
     def public(self, context):
+        """Collect the task, environment, limits, and recent feedback supplied to
+        development.
+        """
+
         return {
             'goal': context['goal'],
             'task_binding': copy.deepcopy(self.recorder.active_task),
@@ -221,69 +263,103 @@ class MethodAdapter:
         }
 
     def decide(self, context):
+        """Ask the host coordinator for the next run decision."""
+
         return self.coordinator.decide(context)
 
     def maintenance(self, context):
+        """Continue the current library-maintenance goal."""
+
         return self.coordinator.maintain(context)
 
     def request_stream(self, requests, context):
+        """Convert the selected requests into the next public request stream."""
+
         return self.execution.request_stream(requests, context)
 
     def on_feedback(self, request, feedback):
+        """Pass a request and its returned receipt to the execution bridge."""
+
         return self.execution.on_feedback(request, feedback)
 
     def on_round_end(self, record):
+        """Record a live invocation's interruption and persist its state."""
+
         return self.execution.on_round_end(record)
 
     def ask(self, role, instructions, data):
+        """Request a parsed operator record from the model client."""
+
         return self.model.ask(role, instructions, data)
 
     def embed(self, texts):
+        """Return the retrieval vectors for the supplied texts."""
+
         return self.embeddings.embed(texts)
 
     def run_fixture(self, components, component_id, arguments, receipts=()):
+        """Run candidate code with the supplied recorded request feedback."""
+
         return self.execution.run_fixture(components, component_id, arguments, receipts)
 
     def start_program(self, *args, **kwargs):
+        """Start a candidate invocation through the execution bridge."""
+
         return self.execution.start_program(*args, **kwargs)
 
     def program_stream(self):
+        """Read the live invocation until its next request or final event."""
+
         return self.execution.program_stream()
 
     def sync_evidence(self):
+        """Update the feedback and development-record indexes."""
+
         return self.evidence.sync_evidence()
 
     @property
     def dev(self):
-        """Historical API alias; the implementation is the typed Controller."""
+        """Return the algorithm Controller."""
         return self.controller
 
     @property
     def program(self):
+        """Return the Program attached to this run, or None."""
+
         return self.execution.program
 
     @property
     def requests(self):
+        """Return the model-call metadata recorded by the operator client."""
+
         return self.model.requests
 
     @property
     def encoder(self):
+        """Return the loaded embedding encoder, or None before its first use."""
+
         return self.embeddings.encoder
 
     @encoder.setter
     def encoder(self, value):
+        """Set the embedding encoder used by retrieval."""
+
         self.embeddings.encoder = value
 
     @property
     def evidence_store(self):
+        """Return the content store containing original evidence records."""
+
         return self.evidence.contexts
 
     @property
     def evidence_index(self):
+        """Return the evidence-ID mapping used for request lookup."""
+
         return self.evidence.index
 
     def summary(self):
-        """Report exact checkpoint/library/cache identities; no success is inferred here."""
+        """Persist state and return its checkpoint, library, and embedding-cache identifiers."""
         self.persist()
         return {
             'method': 'SmartRefactorer',
@@ -307,4 +383,6 @@ class MethodAdapter:
 
     @property
     def feedback(self):
+        """Return the execution feedback collected for the current decision."""
+
         return self.execution.feedback

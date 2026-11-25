@@ -1,7 +1,5 @@
-"""Archive public environment interfaces and reject worktree drift during a run.
-
-This is a source/manifest guard, not process isolation. Runtime worlds, tokens,
-credentials, derived indexes and large Wiki/game-source archives are excluded.
+"""Record environment source and asset fingerprints, archive their initial bytes, and track
+edits.
 """
 
 import hashlib
@@ -11,10 +9,44 @@ from audit.recorder import save_json, utc_now
 
 
 class EnvironmentRevisionChanged(RuntimeError):
+    """Report a monitored environment file change detected by check().
+
+    The exception message identifies the revision record used by the runner.
+    check() raises this after observe() has recorded the changed file entries.
+
+    Example:
+        revision.check()
+
+    If a monitored file changed after revision was created, this call raises
+    EnvironmentRevisionChanged and the runner stops the current run.
+    """
+
     pass
 
 
 class EnvironmentRevision:
+    """Track the initial and subsequent contents of an environment's selected files.
+
+    root is the resolved environment asset Path. PATTERNS selects source,
+    interface, build, task, and installed-asset records. For TechMC, capture()
+    also includes configured data files and the separate Python source package.
+    start and latest are fingerprint manifests; changes maps file names to
+    their before/after records and retains previously detected changes.
+
+    original_bytes holds dict[str, bytes] until attach() writes the initial
+    source archive. path and recorder are None until attach() binds them.
+    check() raises EnvironmentRevisionChanged after detecting a change;
+    finalize() writes a last observation and returns the report summary.
+
+    Example:
+        revision = EnvironmentRevision(ASSET_ROOT)
+        revision.attach(run_folder / 'environment-revision.json', recorder)
+        revision.check()
+
+    The run now has its initial source archive and a manifest that check()
+    compares against current file contents before further work.
+    """
+
     PATTERNS = (
         '*.py',
         'adapters/*.py',
@@ -34,6 +66,8 @@ class EnvironmentRevision:
     )
 
     def __init__(self, root):
+        """Capture the initial manifest and bytes for the selected environment files."""
+
         self.root = Path(root).resolve()
         self.started_at = utc_now()
         if not self.root.is_dir():
@@ -45,14 +79,29 @@ class EnvironmentRevision:
         self.recorder = None
 
     def capture(self, keep_bytes=False):
+        """Return a fingerprint manifest and, when requested, the selected file bytes."""
+
         paths = {p for pattern in self.PATTERNS for p in self.root.glob(pattern) if p.is_file()}
         files = {}
+        # contents: dict[str, bytes]; populated only when keep_bytes is true.
         contents = {}
+        # named: dict[str, Path], mapping archive-relative names to their current file paths.
         named = {path.relative_to(self.root).as_posix(): path for path in paths}
-        # Installed assets retain their old location; executable environment
-        # code has a separate owner. Pin both, without unsafe '..' archive keys.
+        # TechMC source, source assets, and installed data have separate roots.
+        # Archive Python source under code/ and use data-relative names for installed assets.
         source = self.root.parent.parent / 'environments/techmc'
         if self.root.name == 'techmc' and self.root.parent.name == 'assets' and source.is_dir():
+            from environments.techmc.paths import ASSET_ROOT, DATA_ROOT
+
+            named.update(
+                {
+                    p.relative_to(DATA_ROOT).as_posix(): p
+                    for pattern in self.PATTERNS
+                    for p in DATA_ROOT.glob(pattern)
+                    if self.root == ASSET_ROOT.resolve()
+                    if p.is_file()
+                }
+            )
             named.update(
                 {
                     'code/' + p.relative_to(source).as_posix(): p
@@ -75,6 +124,10 @@ class EnvironmentRevision:
         }, contents
 
     def attach(self, path, recorder):
+        """Archive the initial bytes, bind the revision record and recorder, then check for
+        edits.
+        """
+
         self.path = Path(path)
         self.recorder = recorder
         archive = self.path.parent / 'environment-source'
@@ -82,11 +135,14 @@ class EnvironmentRevision:
             target = archive / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
+        # The initial file bytes are now in environment-source/; release the in-memory copies.
         self.original_bytes = {}
         self.save()
         self.check()
 
     def observe(self):
+        """Compare current files with the initial manifest and record newly observed changes."""
+
         self.latest, _ = self.capture()
         old = self.start['files']
         new = self.latest['files']
@@ -109,12 +165,18 @@ class EnvironmentRevision:
         return bool(self.changes)
 
     def check(self):
+        """Observe the selected files and raise if this run has recorded any changes."""
+
         if self.observe():
             raise EnvironmentRevisionChanged(
                 'Environment worktree changed during this run; stop before further generation/actions. See environment-revision.json'
             )
 
     def save(self):
+        """Write the initial manifest, latest manifest, and accumulated changes when
+        attached.
+        """
+
         if self.path is not None:
             save_json(
                 self.path,
@@ -132,6 +194,8 @@ class EnvironmentRevision:
             )
 
     def summary(self):
+        """Return report fields for the fingerprints, changed files, and archive paths."""
+
         return {
             'initial_fingerprint': self.start['fingerprint'],
             'latest_fingerprint': self.latest['fingerprint'],
@@ -144,6 +208,8 @@ class EnvironmentRevision:
         }
 
     def finalize(self):
+        """Record one final observation and return the revision summary."""
+
         self.observe()
         self.save()
         return self.summary()

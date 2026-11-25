@@ -1,9 +1,8 @@
-"""Historical step-profile compatibility, not the language for new skills.
+"""Evaluate the step-profile components stored by earlier executions.
 
-Every skill defines step(state, feedback, args). It returns a JSON transition:
-{state, request}, {state, call, args}, or {state, done:true, result}.
-All side effects belong to yielded public requests. No external world is replayed.
-The AST allowlist is the execution language, not a general Python sandbox.
+A step function receives state, feedback, and arguments, then returns its next
+state with a request, helper call, or final result. This module parses the
+supported expression nodes, evaluates the function, and checks its JSON return.
 """
 
 import ast
@@ -84,6 +83,8 @@ ALLOWED = (
 
 
 def parse(source):
+    """Parse a step function and check its signature and supported AST node types."""
+
     try:
         tree = ast.parse(source)
     except RecursionError as exc:
@@ -128,11 +129,16 @@ def parse(source):
 
 
 def step(source, state, feedback, args):
+    """Evaluate one step against copied input values and return its checked transition."""
+
     fn = parse(source)
     scope = copy.deepcopy({'state': state, 'feedback': feedback, 'args': args})
+    # fuel: list[int] with one counter, shared by nested expression evaluations.
     fuel = [10000]
 
     def expr(n):
+        """Evaluate an expression node using the copied scope and shared expression counter."""
+
         fuel[0] -= 1
         if fuel[0] < 0:
             raise ValueError('Pure step expression limit exceeded')
@@ -171,6 +177,8 @@ def step(source, state, feedback, args):
         if isinstance(n, ast.IfExp):
             return expr(n.body if expr(n.test) else n.orelse)
         if isinstance(n, ast.BoolOp):
+            # value: object, the current operand; Python and/or returns an operand rather than
+            # forcing bool.
             value = expr(n.values[0])
             for v in n.values[1:]:
                 if (
@@ -202,6 +210,10 @@ def step(source, state, feedback, args):
         raise ValueError('Unsupported expression')
 
     def statements(nodes):
+        """Execute assignments and branches, returning whether a return statement was
+        reached.
+        """
+
         for n in nodes:
             if isinstance(n, ast.Return):
                 return True, expr(n.value)
@@ -229,7 +241,7 @@ def step(source, state, feedback, args):
 
 
 def validate_transition(result):
-    """Check the same wire contract for execution and proposed exact fixtures."""
+    """Check the next state and its request, helper call, or completion record."""
     if (
         not isinstance(result, dict)
         or 'state' not in result
@@ -257,6 +269,7 @@ def validate_transition(result):
                 raise ValueError('Invalid explicit request identity')
     if 'call' in result and not isinstance(result['call'], str):
         raise ValueError('Helper target must be a component ID')
+    # encoded: str, the serialized transition used for size and JSON round-trip checks.
     encoded = json.dumps(result, allow_nan=False)
     if len(encoded) > 1000000:
         raise ValueError('Step result too large')
@@ -266,23 +279,33 @@ def validate_transition(result):
 
 
 def references(source):
+    """Trace returned transition expressions to find named helper calls and unresolved
+    targets.
+    """
+
     fn = parse(source)
     calls = set()
     dynamic = False
     nodes = list(ast.walk(fn))
 
     def key(n):
+        """Represent a name, indexed target, or expression as a comparable AST key."""
+
         if isinstance(n, ast.Name):
             return ('name', n.id)
         if isinstance(n, ast.Subscript):
             return ('subscript', key(n.value), ast.dump(n.slice, include_attributes=False))
         return ('expression', ast.dump(n, include_attributes=False))
 
+    # pending: list[ast.expr], used as a stack while following returned values through
+    # assignments.
     pending = [n.value for n in nodes if isinstance(n, ast.Return) and n.value is not None]
     seen = set()
     assignments = [n for n in nodes if isinstance(n, ast.Assign)]
 
     def record(value):
+        """Collect a literal helper ID, or mark its expression as dynamically resolved."""
+
         nonlocal dynamic
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             calls.add(value.value)

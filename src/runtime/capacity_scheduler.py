@@ -1,4 +1,4 @@
-"""Persistent capacity queue. A waiting job has no method process and no token budget use."""
+"""Queue runs, claim available environment slots, and collect worker exit results."""
 
 import json
 import os
@@ -11,18 +11,39 @@ from audit.recorder import save_json
 
 
 def write(path, data):
+    """Save a JSON file through the shared recorder writer."""
+
     save_json(path, data)
 
 
 class SlotLease:
-    """OS-released claim shared by concurrent dispatchers; no stale PID lock stealing."""
+    """Hold an operating-system file lock for one environment slot group.
+
+    path is the shared lock-file Path. stream is None before acquisition and
+    after release, or an open binary file while the claim is held. acquire()
+    returns immediately with a bool. Closing the stream releases the lock;
+    the operating system also releases it when the owning process exits.
+
+    Example:
+        lease = SlotLease(claim_path)
+        if lease.acquire():
+            lease.release()
+
+    A successful acquisition claims this slot group until release(). The
+    scheduler holds that claim for the lifetime of the allocated worker.
+    """
 
     def __init__(self, path):
+        """Set the lock-file path with no open claim."""
+
         self.path = Path(path)
         self.stream = None
 
     def acquire(self):
+        """Try to lock the file and return whether this dispatcher acquired it."""
+
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # stream changes from None to a binary file holding the operating-system lock.
         self.stream = self.path.open('a+b')
         self.stream.seek(0)
         try:
@@ -45,15 +66,36 @@ class SlotLease:
             return False
 
     def release(self):
+        """Close the claim file and release its operating-system lock."""
+
         if self.stream:
             self.stream.close()
             self.stream = None
 
 
 class Scheduler:
+    """Dispatch queued jobs as environment capacity becomes available.
+
+    jobs is a list of mutable job dictionaries, including each run directory,
+    interpreter, configuration, and queue status. provider supplies the default
+    capacity probe. running maps job IDs to (Popen, SlotLease) pairs. A slot
+    group admits one job at a time; max_parallel also limits this dispatcher.
+    save() persists queue state, tick() processes exits and launches jobs, and
+    run() repeats until all jobs leave the queued or running states.
+
+    Example:
+        scheduler = Scheduler(folder, provider, jobs)
+        finished = scheduler.run(provider.slots(ports))
+
+    finished contains the updated job records, including worker exit codes and
+    available report summaries. Task acceptance is recorded in those reports.
+    """
+
     def __init__(
         self, folder, provider, jobs, *, max_parallel=4, poll_seconds=5, probe=None, launch=None
     ):
+        """Bind the queue, provider, launch callbacks, and polling limits."""
+
         if max_parallel < 1 or poll_seconds <= 0:
             raise ValueError('Invalid scheduler limits')
         self.folder = Path(folder)
@@ -63,10 +105,13 @@ class Scheduler:
         self.poll_seconds = poll_seconds
         self.probe = probe or provider.probe
         self.launch = launch or self._launch
+        # running: dict[str, tuple[Popen, SlotLease]], keyed by job ID.
         self.running = {}
         self.last_wait = None
 
     def save(self):
+        """Persist the current jobs and number of active workers to queue.json."""
+
         write(
             self.folder / 'queue.json',
             {
@@ -78,6 +123,8 @@ class Scheduler:
         )
 
     def _launch(self, job, slot):
+        """Write the slot-specific configuration and start the allocation worker."""
+
         config = {
             **job['configuration'],
             'port': slot['port'],
@@ -111,8 +158,11 @@ class Scheduler:
         return process
 
     def tick(self, slots):
+        """Collect worker exits, launch queued jobs into free slots, and report pending work."""
+
         for identifier, entry in list(self.running.items()):
             process, lease = entry
+            # code: int | None; None means the worker is still running.
             code = process.poll()
             if code is None:
                 continue
@@ -153,6 +203,7 @@ class Scheduler:
                 ),
                 flush=True,
             )
+        # active_groups: set[str] of environment slot groups currently assigned to workers.
         active_groups = {j['group'] for j in self.jobs if j['status'] == 'running'}
         for job in self.jobs:
             if job['status'] != 'queued' or len(self.running) >= self.max_parallel:
@@ -161,9 +212,10 @@ class Scheduler:
             for slot in slots:
                 if slot['group'] in active_groups:
                     continue
-                # Include controllers/JVMs whose worker has launched but whose
-                # full RSS may not yet be visible. Conservative double counting
-                # is preferable to overbooking a local encoder during startup.
+                # Reserve each running controller and local JVM allocation during startup,
+                # including the interval before their full memory use appears in process
+                # measurements.
+
                 reserved_mb = sum(
                     j['configuration'].get('controller_mb', 512)
                     + (0 if j.get('remote') else j['configuration'].get('heap_mb', 2048) + 640)
@@ -220,6 +272,10 @@ class Scheduler:
         return any(j['status'] in ('queued', 'running') for j in self.jobs)
 
     def run(self, slots):
+        """Poll the queue to completion; on interruption, cancel queued jobs and request
+        worker stops.
+        """
+
         self.save()
         try:
             while self.tick(slots):
@@ -245,6 +301,6 @@ class Scheduler:
                         {'stop': True, 'reason': 'Scheduler cancelled'},
                     )
             self.save()
-            # Running hosts retain ownership and cooperative cleanup; no foreign process is killed.
+            # Running workers receive control.json and perform their own cleanup.
             raise
         return self.jobs

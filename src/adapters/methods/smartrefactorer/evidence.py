@@ -1,4 +1,4 @@
-"""Durable raw evidence and readable indexes, with no task-success decisions."""
+"""Store original evidence and build compact request and development-history indexes."""
 
 import copy
 import json
@@ -9,9 +9,29 @@ from algorithms.smartrefactorer.library import atomic
 
 
 class EvidenceCatalog:
-    """Keep original feedback and complete development records addressable by hash."""
+    """Make recorded feedback and development results readable by content ID.
+
+    contexts is a ContextStore holding complete JSON records. index maps content IDs
+    to request metadata and is saved in evidence-index.json. controller is attached
+    when the adapter binds; development_history then lists the operator outputs and
+    accepted plans stored in that controller's history.
+
+    presentation() saves its original value and replaces large parts of the model
+    view with references. A later context read follows an ID and JSON Pointer back
+    to the saved value.
+
+    Example::
+
+        evidence = EvidenceCatalog(directory, recorder)
+        identifier = evidence.remember_evidence(request, feedback)
+        original = evidence.contexts.read(identifier, '/feedback')
+
+    original is the feedback object supplied to remember_evidence().
+    """
 
     def __init__(self, directory, recorder):
+        """Open the evidence store and load its saved request index."""
+
         self.directory = Path(directory)
         self.recorder = recorder
         self.controller = None
@@ -21,18 +41,18 @@ class EvidenceCatalog:
         self.development_history = {}
 
     def save_index(self):
-        """Persist only the lookup index; raw evidence stays in the content store."""
+        """Write the request metadata index to evidence-index.json."""
         atomic(self.directory / 'evidence-index.json', self.index)
 
     def presentation(self, value, inline_bytes=2048, depth=3):
-        """Index large unrequested evidence; explicit reads still return exact data.
-
-        This is an availability index, never a replacement tool result. Paths
-        address one immutable original, so every omitted subtree is recoverable.
-        """
+        """Save a JSON value and return a view with references for its large subtrees."""
         identifier = self.contexts.put(value)
 
         def present(node, path, depth):
+            """Inline a small subtree, descend into a small dictionary, or return its
+            reference.
+            """
+
             if len(canonical(node)) <= inline_bytes:
                 return copy.deepcopy(node)
             if isinstance(node, dict) and len(node) <= 32 and depth:
@@ -43,6 +63,8 @@ class EvidenceCatalog:
                     for key, item in node.items()
                 }
             reference = {'id': identifier, 'path': path}
+            # index: dict replacing an oversized node with its content ID, pointer, and size
+            # metadata.
             index = {
                 'presentation': 'evidence_index',
                 'exact_value': reference,
@@ -66,7 +88,7 @@ class EvidenceCatalog:
         return present(value, '', depth)
 
     def remember_evidence(self, request, feedback):
-        """Retain the complete original request/feedback pair; indexes are not replacement results."""
+        """Store a request/feedback pair and add its metadata to the index."""
         identifier = self.contexts.put(
             {'request': copy.deepcopy(request), 'feedback': copy.deepcopy(feedback)}
         )
@@ -89,7 +111,7 @@ class EvidenceCatalog:
         return identifier
 
     def sync_evidence(self):
-        """Index the shared recorder and algorithm history without evicting the active operator working set."""
+        """Index recorded environment calls and select recent development records by role."""
         for call in self.recorder.env_calls:
             if call.get('stage') in ('discovery', 'workflow', 'knowledge') and isinstance(
                 call.get('feedback'), dict
@@ -120,6 +142,7 @@ class EvidenceCatalog:
                         ),
                     }
                 )
+        # selected: set[int] of positions in records, rather than content IDs.
         selected = set()
         for role, limit in (
             ('Plan', 3),

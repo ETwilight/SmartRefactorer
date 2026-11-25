@@ -1,7 +1,5 @@
-"""TechMC 与实验宿主之间的环境端口。
-
-EnvironmentGateway 提供请求、能力发现、反馈投影和证据归档；TechMCProvider
-构造环境并接通资源生命周期，算法通过端口读取统一的任务与执行事实。
+"""Connect TechMC environment sessions, host allocations, and evidence views to the shared
+runtime.
 """
 
 import copy
@@ -12,14 +10,34 @@ from environments.techmc.actions.catalog import READ_SERVICES, request_effect
 
 
 class AllocationFailure(RuntimeError):
-    """A host failure with retained admission, cleanup and accounting evidence."""
+    """Carry the host's allocation-failure record to the worker and capacity queue.
+
+    allocation_record is the supplied dictionary containing the primary error,
+    exception chain, startup state, cleanup status, and available accounting
+    evidence. Its error field initializes the RuntimeError message. The queue
+    reads this record when classifying an allocation as waiting for capacity.
+
+    Example, in the host failure handler:
+        record = allocation_failure_record(host, config, exc, archive_errors)
+        raise AllocationFailure(record) from exc
+
+    The raised error retains the host evidence alongside its original cause.
+    """
 
     def __init__(self, record):
+        """Retain the allocation record and use its primary error as the exception message."""
+
         self.allocation_record = record
         super().__init__(record['error'])
 
 
 def allocation_failure_record(host, config, exc, archive_errors):
+    """Collect startup, cleanup, exception-chain, and method-start evidence into one
+    allocation record.
+    """
+    # chain: list[dict[str, str]], following exception causes or contexts until a repeated
+    # object.
+
     chain = []
     seen = set()
     current = exc
@@ -27,7 +45,7 @@ def allocation_failure_record(host, config, exc, archive_errors):
         seen.add(id(current))
         chain.append({'type': type(current).__name__, 'message': str(current)})
         current = current.__cause__ if current.__cause__ is not None else current.__context__
-    # Experiment.run's finally may replace a startup failure with cleanup failure.
+    # A cleanup exception can wrap the earlier startup exception in Experiment.run().
     primary = chain[0]
     if primary['message'].startswith('Experiment cleanup incomplete') and len(chain) > 1:
         primary = chain[1]
@@ -86,8 +104,8 @@ def allocation_failure_record(host, config, exc, archive_errors):
             'accounting/summary.json',
         )
     )
-    # No inference from a missing report: a child may have made a paid request
-    # before crashing. Only the trusted host's explicit child=None proves no start.
+    # Check the host's explicit child state together with recorded method evidence.
+    # An absent report alone leaves the child's start and usage state unknown.
     unstarted = (
         hasattr(host, 'child')
         and host.child is None
@@ -111,19 +129,54 @@ def allocation_failure_record(host, config, exc, archive_errors):
     return record
 
 
-# These are public read services, not primitive actions. In particular a registry
-# query may need a game connection even though it never mutates game state.
+# READ_SERVICES contains public operations alongside the local knowledge methods.
+# registry.get uses a game connection and has its own requires_game metadata.
 
 
 class EnvironmentGateway:
+    """Expose a concrete TechMC Environment through the shared environment-port interface.
+
+    environment owns the session, task state, request ledger, and cleanup.
+    handle() and close() delegate to it; __getattr__ forwards other environment
+    operations. The gateway supplies discovery projections, action metadata,
+    knowledge/read-service request construction, source paths, and evidence
+    export. contracts and failure_contract expose the TechMC schema and response
+    modules. source_root identifies project-owned assets; source_files() also
+    includes the separate executable Python package.
+
+    _verified_recovery_approval is an optional copied host approval attached by
+    bind_recovery_approval(). continuation returns a copied environment
+    descriptor with that approval when available. Public read services and local
+    knowledge methods share knowledge_request(); registry.get requires a game
+    connection, as indicated by its tool metadata.
+
+    Example:
+        gateway = EnvironmentGateway(environment)
+        request = gateway.knowledge_request(
+            'schemas.get', {'name': 'request'}, request_id
+        )
+        feedback = gateway.handle(request)
+
+    feedback is the environment response containing the request schema. The
+    same gateway gives the method its effect metadata and retained-feedback access.
+    """
+
     def __init__(self, environment):
+        """Bind the concrete environment served by this port."""
+
         self.environment = environment
 
     def __getattr__(self, name):
+        """Forward an attribute not supplied by the gateway to its environment."""
+
         return getattr(self.environment, name)
 
     @property
     def continuation(self):
+        """Return a copied continuation descriptor with the attached host approval when
+        present.
+        """
+
         value = copy.deepcopy(getattr(self.environment, 'continuation', None))
         approval = self.__dict__.get('_verified_recovery_approval')
         if isinstance(value, dict) and approval is not None:
@@ -131,16 +184,22 @@ class EnvironmentGateway:
         return value
 
     def bind_recovery_approval(self, approval):
-        # Private trusted-host data, not an agent RPC or public task prompt.
+        """Retain a copy of the environment-verified approval for host continuation handling."""
+        # Store this verified approval for the host's continuation descriptor.
+
         self._verified_recovery_approval = copy.deepcopy(approval)
 
     @property
     def source_root(self):
-        from environments.techmc.contracts import ROOT
+        """Return the Path containing project-owned TechMC source assets."""
 
-        return ROOT
+        from environments.techmc.paths import ASSET_ROOT
+
+        return ASSET_ROOT
 
     def source_files(self):
+        """List declared task, schema, procedure, and Python source files for run archival."""
+
         root = self.source_root
         from environments.techmc.paths import SOURCE_ROOT
 
@@ -166,27 +225,39 @@ class EnvironmentGateway:
 
     @property
     def contracts(self):
+        """Return the TechMC JSON-schema module."""
+
         from environments.techmc import contracts
 
         return contracts
 
     @property
     def failure_contract(self):
+        """Return the TechMC execution and failure-normalization module."""
+
         from environments.techmc import failure_contract
 
         return failure_contract
 
     @property
     def task_free_methods(self):
+        """Return knowledge and local diagnostic method names available without an active
+        task.
+        """
+
         from environments.techmc.actions.catalog import KNOWLEDGE_METHODS
         from environments.techmc.environment import LOCAL_DIAGNOSTICS
 
         return KNOWLEDGE_METHODS | LOCAL_DIAGNOSTICS
 
     def project_observations(self, observations):
-        """MC block names are projected here, never in a method's learning core."""
+        """Collect loaded block names from observe.blocks feedback, retaining the latest
+        value per position.
+        """
         import json, re
 
+        # blocks: dict[str, str], mapping JSON-encoded positions to their latest observed block
+        # name.
         blocks = {}
         for observation in observations:
             action = observation['request'].get('params', {}).get('action', {})
@@ -195,6 +266,8 @@ class EnvironmentGateway:
             result = observation['feedback'].get('result') or {}
             if not isinstance(result, dict):
                 continue
+            # Select the operation-result dictionary when feedback still contains a native RPC
+            # envelope.
             result = result.get('result', result)
             for block in result.get('blocks', []):
                 matched = re.fullmatch(
@@ -205,16 +278,22 @@ class EnvironmentGateway:
         return {'nearby_blocks': list(blocks.values())}
 
     def handle(self, request):
+        """Dispatch a protocol request through the concrete environment."""
+
         return self.environment.handle(request)
 
     def close(self):
+        """Close the concrete environment and return its cleanup result."""
+
         return self.environment.close()
 
     def task_index(self, feedback):
+        """Project task-list feedback into the shared task-index view."""
+
         return task_index(feedback)
 
     def discovery_params(self, op):
-        """Legacy bootstrap retained for consumers whose migration is deferred."""
+        """Select summary environment discovery and indexed action discovery parameters."""
         return (
             {'detail': 'summary'}
             if op == 'environment.describe'
@@ -222,6 +301,10 @@ class EnvironmentGateway:
         )
 
     def compact_discovery_params(self, op):
+        """Select manifest environment discovery and indexed action/task discovery
+        parameters.
+        """
+
         return (
             {'detail': 'manifest'}
             if op == 'environment.describe'
@@ -229,22 +312,28 @@ class EnvironmentGateway:
         )
 
     def prefer_default_response(self, request):
-        """Region already supplies a bounded view with exact section/read refs."""
+        """Select the provider's region-specific default view for observe.region requests."""
         return (
             request.get('op') == 'action.execute'
             and request.get('params', {}).get('action', {}).get('method') == 'observe.region'
         )
 
     def project_discovery(self, discovery):
+        """Copy discovery feedback, projecting the task catalogue through task_index()."""
+
         return {
             k: self.task_index(v) if k == 'tasks.list' else copy.deepcopy(v)
             for k, v in discovery.items()
         }
 
     def archive_evidence(self, folder, reports):
+        """Copy the session and evaluation evidence into the shared run layout."""
+
         return archive_environment(folder, self.environment, reports)
 
     def tool_metadata(self, method):
+        """Return service metadata or a copied primitive action contract."""
+
         if method in READ_SERVICES:
             requires_game = method == 'registry.get'
             return {
@@ -262,11 +351,15 @@ class EnvironmentGateway:
         return copy.deepcopy(next(t for t in action_catalog() if t['method'] == method))
 
     def knowledge_methods(self):
+        """List local knowledge methods and public read-service operation names."""
+
         from environments.techmc.actions.catalog import KNOWLEDGE_METHODS
 
         return sorted(KNOWLEDGE_METHODS | READ_SERVICES)
 
     def knowledge_request(self, method, params, request_id):
+        """Build a direct service request or local knowledge action.execute request."""
+
         if method not in self.knowledge_methods():
             raise ValueError('Unknown knowledge method')
         if method in READ_SERVICES:
@@ -291,14 +384,45 @@ class EnvironmentGateway:
         }
 
     def readonly(self, request):
+        """Classify a request using TechMC's public effect metadata."""
+
         return request_effect(request) == 'read_only'
 
 
 class TechMCProvider:
+    """Construct TechMC ports and manage their allocated host lifecycle.
+
+    The provider resolves connection options and verifies explicit saved-run
+    descriptors. _verified_resume lazily caches a verified Baseline or PSN
+    descriptor by source directory; _resume() returns a copy after checking the
+    configured port. configure_run() attaches their task stream and retained
+    world manager, or restores their verified saved binding.
+
+    run_allocated() owns an Experiment for the child command, collects its exit
+    result, and copies host records into the run's environment/host directory.
+    AllocationFailure carries failed-start and cleanup evidence. slots() groups
+    local and remote ports for scheduling; probe() checks the corresponding
+    host capacity and deployment. auditor() creates a separate audit bridge.
+
+    Example:
+        provider = TechMCProvider()
+        gateway = provider.connect(provider.connection_options(config))
+        provider.configure_run(gateway, config)
+        gateway.close()
+
+    This constructs and configures the worker's environment port, then closes
+    it. The allocation worker calls run_allocated() to manage the server and
+    method process around that connection lifecycle.
+    """
+
     def wrap(self, environment):
+        """Return the existing environment port or wrap a concrete TechMC environment."""
+
         return as_gateway(environment)
 
     def validate_resume_source(self, source, *, method, recovery_receipt):
+        """Verify the saved-source recovery receipt and return its copied approval record."""
+
         from environments.techmc.explicit_resume import resume_descriptor
         from environments.techmc.contracts import ROOT
 
@@ -315,10 +439,16 @@ class TechMCProvider:
         return copy.deepcopy(approval)
 
     def recovery_approval(self, config):
+        """Return the approval from the configured verified continuation, or None."""
+
         resume = self._resume(config)
         return copy.deepcopy(resume.get('recovery_approval')) if resume else None
 
     def _resume(self, config):
+        """Load or reuse the selected Baseline/PSN continuation descriptor and check its
+        original port.
+        """
+
         options = config.get('options', {})
         source = options.get(config['method'] + '_resume_from')
         if source is None:
@@ -329,6 +459,7 @@ class TechMCProvider:
         from environments.techmc.contracts import ROOT
 
         key = str(Path(source).resolve())
+        # cached: dict | None, containing the previously verified saved-run descriptor.
         cached = getattr(self, '_verified_resume', None)
         if cached is None or cached['source_run'] != key:
             cached = resume_descriptor(
@@ -343,6 +474,10 @@ class TechMCProvider:
         return copy.deepcopy(cached)
 
     def connection_options(self, config):
+        """Merge configured connection options with the verified saved session identity when
+        resuming.
+        """
+
         options = copy.deepcopy(config.get('environment_options', {}))
         resume = self._resume(config)
         if resume:
@@ -356,6 +491,10 @@ class TechMCProvider:
         return options
 
     def preflight(self, config):
+        """Check knowledge dependencies and the Baseline/PSN task-stream configuration or
+        saved descriptor.
+        """
+
         from environments.techmc.knowledge_backend import preflight
 
         preflight()
@@ -381,6 +520,10 @@ class TechMCProvider:
         )
 
     def configure_run(self, environment, config):
+        """Configure Baseline/PSN task delivery and worlds, restoring the saved visit when
+        requested.
+        """
+
         if config['method'] not in ('baseline', 'psn'):
             return
         options = config.get('options', {})
@@ -404,6 +547,10 @@ class TechMCProvider:
         environment.enable_task_worlds()
 
     def run_allocated(self, config, command, cwd):
+        """Run the child command under an Experiment allocation and archive the resulting
+        host records.
+        """
+
         from environments.techmc.experiment_manager import Experiment
 
         options = config.get('options', {})
@@ -463,7 +610,7 @@ class TechMCProvider:
                 except OSError as exc:
                     archive_errors.append({'source': str(source), 'error': str(exc)})
             if archive_errors:
-                # Original host records are retained even if their projection is locked.
+                # Record failed archive copies alongside the host result.
                 host.record['host_archive_errors'] = archive_errors
         if failure is not None:
             raise AllocationFailure(
@@ -479,11 +626,17 @@ class TechMCProvider:
         }
 
     def connect(self, configuration):
+        """Construct a concrete Environment from connection options and return its gateway."""
+
         from environments.techmc import Environment
 
         return EnvironmentGateway(Environment(**dict(configuration)))
 
     def auditor(self, folder, environment):
+        """Create a round auditor with a separate server bridge and schematic export
+        disabled.
+        """
+
         from audit.projection import ProgressAuditor
         from environments.techmc.adapters.bridge import Bridge
         from urllib.parse import urlsplit
@@ -499,6 +652,8 @@ class TechMCProvider:
         return ProgressAuditor(folder, server=bridge, schematics=False)
 
     def slots(self, ports=None):
+        """List requested or configured ports with their local/remote scheduling groups."""
+
         from environments.techmc.remote_host import for_port
         from environments.techmc.contracts import ROOT
         import json
@@ -521,6 +676,10 @@ class TechMCProvider:
         return result
 
     def probe(self, slot, heap_mb=2048, controller_mb=512, reserved_mb=0):
+        """Check controller and server capacity, active allocations, and remote deployment
+        readiness.
+        """
+
         from environments.techmc.contracts import ROOT
         from environments.techmc.remote_host import for_port
         from environments.techmc.experiment_registry import check_existing, host_policy
@@ -543,6 +702,8 @@ class TechMCProvider:
                     {'heap_mb': heap_mb},
                     timeout=20,
                 )
+                # raw: str returned by the remote Python command; state is its decoded
+                # capacity-result dictionary.
                 state = json.loads(raw)
                 if state.get('available'):
                     deployment = remote.verify_deployment()
@@ -562,13 +723,15 @@ class TechMCProvider:
 
 
 def validate_report(name, value):
+    """Validate a report value against a named TechMC schema."""
+
     from environments.techmc.contracts import validate
 
     return validate(name, value)
 
 
 def as_gateway(environment):
-    """Wrap a concrete TechMC environment in the provider port when necessary."""
+    """Return an existing environment port or construct an EnvironmentGateway around it."""
     return (
         environment
         if hasattr(environment, 'contracts') and hasattr(environment, 'tool_metadata')
@@ -577,12 +740,16 @@ def as_gateway(environment):
 
 
 def archive_environment(folder, environment, reports):
-    """Copy known evidence files into the run; never traverse credentials/runtime."""
+    """Copy named session/evaluation records and saved-world checkpoints into the run,
+    returning artifact records.
+    """
     roots = []
     session = getattr(environment, 'session', None)
     if session is not None and hasattr(session, 'directory'):
         roots.append(('session', Path(session.directory)))
-    environment_runs = (Path(__file__).resolve().parents[3] / 'assets/techmc/runs').resolve()
+    from environments.techmc.paths import DATA_ROOT
+
+    environment_runs = (DATA_ROOT / 'runs').resolve()
     for report in reports:
         source = Path(report['evidence_path']).resolve()
         if source.is_relative_to(environment_runs):
@@ -635,6 +802,8 @@ def archive_environment(folder, environment, reports):
 
 
 def task_index(feedback):
+    """Project task-list feedback through TechMC's guidance task-index implementation."""
+
     from environments.techmc.guidance import task_index as project
 
     return project(feedback)

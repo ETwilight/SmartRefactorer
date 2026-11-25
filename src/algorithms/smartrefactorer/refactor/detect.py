@@ -1,11 +1,13 @@
-"""Detect：从已发布组件的差异、调用结构与执行证据中提出维护机会。
+"""Look for a maintenance goal after accepted components are published.
 
-返回机会的目标、操作族、受影响组件和证据引用；maintain 据此复用开发流程。
+Detect reads the publication changes, proposal, checks, execution, and task
+acceptance. A returned opportunity supplies the next maintenance goal; an empty
+opportunity finishes the review for this task.
 """
 
 
 def detect(controller):
-    """Inspect unreviewed structural evidence; absence is not a forced refactor."""
+    """Return a proposed maintenance opportunity from the latest publication evidence."""
     state = controller.state
     result = controller.operator(
         'Detect',

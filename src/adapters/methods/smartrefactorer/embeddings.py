@@ -1,17 +1,37 @@
-"""Local BGE setup/cache with the shared observed meter; no retrieval policy."""
+"""Load the local retrieval encoder and keep its per-run vectors and usage records."""
 
 import json
 from pathlib import Path
 from audit.control import RunStopped
 from algorithms.smartrefactorer.library import atomic, digest
 
-RESEARCH_ROOT = Path(__file__).resolve().parents[3]
+from runtime.storage import MODELS_ROOT
 
 
 class DenseEmbeddings:
-    """Inject embeddings into Retrieve while retaining original usage and cache identity."""
+    """Provide retrieval vectors with a persistent cache for this run.
+
+    directory is the method-state Path containing embedding-cache.json. recorder
+    collects inference usage and response records; guard checks the run limits.
+    device and precision select the local BGE backend. encoder is initially None
+    and becomes a MeteredDense on the first embed() call.
+
+    The saved cache contains the encoder identity and a mapping from text hashes to
+    float vectors. A cache is loaded when its identity matches the current encoder.
+    New inference is recorded before its vectors are written to that cache.
+
+    Example, using the same query/description pair as retrieval::
+
+        embeddings = DenseEmbeddings(directory, recorder, guard)
+        query, skill = embeddings.embed([task_text, skill_description])
+        similarity = sum(a * b for a, b in zip(query, skill))
+
+    similarity is the dot-product score used to rank this skill for the task.
+    """
 
     def __init__(self, directory, recorder, guard, *, device='cpu', precision='float32'):
+        """Keep the cache directory, recorder, run-limit callback, and backend options."""
+
         self.directory = Path(directory)
         self.recorder = recorder
         self.guard = guard
@@ -20,12 +40,12 @@ class DenseEmbeddings:
         self.precision = precision
 
     def embed(self, texts):
-        """Record completed inference before rejecting output or cache persistence; never relabel it unknown billing."""
+        """Return one vector per text, recording new inference and updating the saved cache."""
         if self.encoder is None:
             import threading
             from runtime.models.embedding import local_bge
 
-            root = RESEARCH_ROOT / 'assets/models/bge-m3'
+            root = MODELS_ROOT / 'bge-m3'
             revision = json.loads((root / 'model-source.json').read_text())['revision']
             try:
                 self.encoder = local_bge(
@@ -52,6 +72,8 @@ class DenseEmbeddings:
             import math
 
             def normalized(vector):
+                """Return a unit-length float list, or None when the vector is invalid."""
+
                 try:
                     if (
                         not isinstance(vector, (list, tuple))
@@ -59,6 +81,7 @@ class DenseEmbeddings:
                         or any((type(x) not in (int, float) for x in vector))
                     ):
                         return None
+                    # values: list[float], a converted copy of the numeric input vector.
                     values = [float(x) for x in vector]
                     if self.encoder.dimensions and len(values) != self.encoder.dimensions:
                         return None
@@ -77,6 +100,8 @@ class DenseEmbeddings:
             if cache_path.exists():
                 cached = json.loads(cache_path.read_text(encoding='utf-8'))
                 if cached.get('identity') == self.encoder.identity:
+                    # vectors: dict[str, list[float]], mapping text-and-model hashes to saved
+                    # vectors.
                     vectors = cached.get('vectors', {})
                     if not isinstance(vectors, dict) or any(
                         (
@@ -99,6 +124,10 @@ class DenseEmbeddings:
             backend = self.encoder.backend
 
             def observed_backend(values):
+                """Record backend inputs and outputs, then save the valid vectors for reuse."""
+                # values: list[str]; vectors: list[list[float]], one model output per input
+                # text.
+
                 vectors = backend(values)
                 calls = getattr(self.recorder, 'models', [])
                 call_id = calls[-1].get('call_id') if calls else None

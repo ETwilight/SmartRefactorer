@@ -1,7 +1,10 @@
-"""机器验收主流程：校验提交、采集测量、计算规则并写入结果。
+"""Validate machine submissions, gather acceptance measurements, and finalize evaluation
+reports.
 
-一次验收将任务版本、提交位置、原生观测和测量窗口绑定在同一份记录中。
-acceptance/ 按机器类型提供物料守恒、产量和结构检查。
+Submission helpers check declared regions, operation, and storage.
+Evaluator captures initial state, establishes the measurement conditions,
+measures production segments, and applies the task's acceptance rules.
+Specialized material and machine checks live in acceptance/.
 """
 
 import copy
@@ -86,6 +89,10 @@ else:
 
 
 def _bound_native_error(exc, step):
+    """Return the native error frame when its request fields and side match this measurement
+    step.
+    """
+
     frame = getattr(exc, 'native_feedback', None)
     request = getattr(exc, 'native_request', None)
     if not isinstance(frame, dict) or not isinstance(request, dict):
@@ -106,7 +113,9 @@ def _bound_native_error(exc, step):
 
 
 def _forceload_no_change(exc, step, max_chunks):
-    """Only an exact terminal no-add callback is eligible for a read-only proof."""
+    """Return chunk origins eligible for postcondition reads after an exact completed
+    forceload no-add callback.
+    """
     frame = _bound_native_error(exc, step)
     if (
         not isinstance(exc, NativeExecutionError)
@@ -151,15 +160,19 @@ def _forceload_no_change(exc, step, max_chunks):
 
 
 def invoke_measurement(session, step, observations, *, evaluation_deadline, max_chunks=64):
-    """Preserve terminal native errors; only pending requests reuse their ID.
+    """Invoke one measurement step and retain its observed result or correlated error frame.
 
-    A forceload add that changes nothing is not silently declared successful:
-    exact read-only per-chunk query evidence must establish its postcondition.
-    The original failed callback remains intact in the acceptance evidence.
+    Poll pending native requests with the same ID within the deadline. For an
+    exact forceload no-add callback, retain the original failure and query each
+    requested chunk to establish the already-forced postcondition.
     """
     deadline = time.monotonic() + 120
 
     def retain(frame, error=None):
+        """Append an observation with the copied request, operation result, and optional
+        native error evidence.
+        """
+
         item = {
             'id': 'obs-' + str(len(observations)),
             'method': step['method'],
@@ -187,7 +200,7 @@ def invoke_measurement(session, step, observations, *, evaluation_deadline, max_
             if frame is not None:
                 pending = frame.get('status') == 'pending_or_unknown'
             elif getattr(exc, 'native_feedback', None) is not None:
-                raise  # mismatched typed evidence never becomes a poll or success
+                raise  # Propagate a typed frame belonging to a different request.
             elif isinstance(exc, NativeExecutionError):
                 raise
             else:
@@ -258,6 +271,8 @@ def invoke_measurement(session, step, observations, *, evaluation_deadline, max_
 
 
 def bounds_volume(bounds):
+    """Return the block volume of ordered inclusive bounds."""
+
     sizes = [b - a + 1 for a, b in zip(bounds['min'], bounds['max'])]
     if min(sizes) <= 0:
         raise ValueError('Bounds must be ordered')
@@ -265,16 +280,22 @@ def bounds_volume(bounds):
 
 
 def contains(bounds, position):
+    """Check whether a position lies inside all three inclusive bound intervals."""
+
     return all(a <= n <= b for a, b, n in zip(bounds['min'], bounds['max'], position))
 
 
 def submission_regions(submission):
+    """Return the main submitted region followed by any additional declared regions."""
+
     return [
         {'dimension': submission['dimension'], 'bounds': submission['bounds']}
     ] + submission.get('regions', [])
 
 
 def in_regions(submission, position, dimension):
+    """Check whether a position belongs to a submitted region in the supplied dimension."""
+
     return any(
         r['dimension'] == dimension and contains(r['bounds'], position)
         for r in submission_regions(submission)
@@ -282,6 +303,8 @@ def in_regions(submission, position, dimension):
 
 
 def maintained_thunderstorm(conditions):
+    """Check the Overworld conditions for rain, thunder, and disabled weather progression."""
+
     world = next(
         (
             w
@@ -298,6 +321,10 @@ def maintained_thunderstorm(conditions):
 
 
 def validate_submission(task, instance_id, submission, max_volume=262144):
+    """Validate the submission contract, task binding, regions, storage declarations, and
+    permitted operation; return a manifest summary.
+    """
+
     validate('submission', submission)
     validate_mode_submission(task, submission)
     validate_review_volumes(task, submission)
@@ -466,7 +493,9 @@ def validate_submission(task, instance_id, submission, max_volume=262144):
 
 
 def tiles(bounds):
-    # Reading batches is a resource limit, not a prescribed machine dimension.
+    """Yield inclusive region-read tiles of at most 16 by 64 by 16 blocks."""
+    # Tile observation reads within the per-call block limit.
+
     for x in range(bounds['min'][0], bounds['max'][0] + 1, 16):
         for y in range(bounds['min'][1], bounds['max'][1] + 1, 64):
             for z in range(bounds['min'][2], bounds['max'][2] + 1, 16):
@@ -481,6 +510,10 @@ def tiles(bounds):
 
 
 def locator(ref, dimension):
+    """Convert a declared block position or entity reference into native container-query
+    parameters.
+    """
+
     result = {'dimension': ref.get('dimension', dimension)}
     if 'position' in ref:
         result.update(zip(('x', 'y', 'z'), ref['position']))
@@ -490,7 +523,13 @@ def locator(ref, dimension):
 
 
 def storage_view(submission, snapshots, boxed=False):
+    """Build physical-slot, product-eligibility, and item-count mappings from the declared
+    output containers.
+    """
+    # all_slots: dict[str, dict], indexed by physical or future packed-box slot_id.
+
     all_slots = {}
+    # eligible: dict[str, set[str]], mapping product item IDs to their declared output slot IDs.
     eligible = {}
     counts = {}
     for output in submission['outputs']:
@@ -533,8 +572,10 @@ def storage_view(submission, snapshots, boxed=False):
                 for outer in snapshot['slots']:
                     storage_slots.extend(outer.get('shulker_slots', []))
                     if outer['count'] == 0 and outer.get('accepts_shulker'):
-                        # Reserve destination space for boxes the machine will pack.
-                        # Empty shells and virtual slots contribute no product credit.
+                        # Reserve future packed-box slots in empty destinations that accept
+                        # shulker boxes.
+                        # These virtual empty slots add capacity; actual product counts still
+                        # come from observed contents.
                         for index in range(27):
                             storage_slots.append(
                                 {
@@ -562,15 +603,27 @@ def storage_view(submission, snapshots, boxed=False):
 
 
 def item_stock(region, item):
-    """Total contents across inventory, packed boxes and loose items, excluding players."""
+    """Count an item across packed inventories and loose items in a region, with
+    operating-player stock handled separately.
+    """
     if 'total_item_counts' in region:
         return region['total_item_counts'].get(item, 0)
     return region['inventory_counts'].get(item, 0) + region['loose_item_counts'].get(item, 0)
 
 
 def allocate_storage(slots, eligible, required=54, headroom=None):
-    # Bipartite slot allocation prevents counting the same empty slot once for
-    # every product. Physical slot IDs also deduplicate both double-chest halves.
+    """Assign distinct compatible slots to each product and reserve additional free capacity
+    for headroom.
+
+    Match (product, ordinal) units to physical slot IDs. Recursively move an
+    existing owner when another compatible slot can accommodate it. First
+    satisfy the required slot count per product, then extend assignments for
+    products whose reserved free-item capacity falls below their headroom target.
+    """
+    # Match each product unit to one physical slot so products share the warehouse without
+    # double counting.
+    # slot_id also merges repeated observations of the same physical slot or double chest.
+
     candidates = {
         p: sorted(
             (
@@ -583,10 +636,18 @@ def allocate_storage(slots, eligible, required=54, headroom=None):
         )
         for p, keys in eligible.items()
     }
+    # owners: dict[str, tuple[str, int]], mapping a slot ID to its assigned (product, ordinal)
+    # unit.
     owners = {}
+    # assignments: dict[tuple[str, int], str], the reverse mapping from product units to slot
+    # IDs.
     assignments = {}
 
     def assign(unit, visited):
+        """Find an augmenting path that assigns this product unit to a distinct compatible
+        slot.
+        """
+
         product = unit[0]
         for key in candidates[product]:
             if key in visited:
@@ -624,8 +685,8 @@ def allocate_storage(slots, eligible, required=54, headroom=None):
                     'blockers_truncated': len(blockers) > 16,
                     'shared_allocation_conflict': len(candidates[product]) >= required,
                 }
-    # The minimum reservation is not an upper bound. Allocate additional slots
-    # for high-throughput buffers instead of ignoring the rest of the warehouse.
+    # After assigning the required slots, reserve further compatible slots
+    # until the observed-output buffer has enough free-item capacity or matching stops.
     if headroom:
         units = {p: required for p in candidates}
         while True:
@@ -654,6 +715,7 @@ def allocate_storage(slots, eligible, required=54, headroom=None):
                 break
     result = {}
     for product in candidates:
+        # keys: list[str] of the distinct slots assigned to this product.
         keys = [key for unit, key in assignments.items() if unit[0] == product]
         result[product] = {
             'reserved_slots': len(keys),
@@ -666,10 +728,8 @@ def allocate_storage(slots, eligible, required=54, headroom=None):
 
 
 def output_access(submission, snapshots):
-    """Chest obstruction is checked by vanilla code, not block-name heuristics.
-
-    This proves lid clearance only, not a walkable path, unlock permission or
-    successful GUI interaction. Other container types retain capacity semantics.
+    """Check native chest-lid clearance for declared output chests, raising when that
+    readback is unavailable.
     """
     for output in submission['outputs']:
         for ref in output['containers']:
@@ -685,6 +745,10 @@ def output_access(submission, snapshots):
 
 
 def production_metrics(task, start, end, initial_inflight, scope='total'):
+    """Subtract initial product debt from collected growth and compute count/rate thresholds
+    for a full window or segment.
+    """
+
     ticks = end['tick'] - start['tick']
     seconds = (end['sample_monotonic_ns'] - start['sample_monotonic_ns']) / 1e9
     if ticks <= 0 or seconds <= 0:
@@ -735,6 +799,10 @@ def production_metrics(task, start, end, initial_inflight, scope='total'):
 
 
 def aggregate_output_metrics(task, metrics, scope='total'):
+    """Combine product metrics for each declared aggregate target and check its window or
+    segment thresholds.
+    """
+
     result = {}
     for group in task['measurement'].get('aggregate_targets', []):
         members = [metrics[p] for p in group['products'] if p in metrics]
@@ -756,7 +824,9 @@ def aggregate_output_metrics(task, metrics, scope='total'):
 
 
 def preflight_submission(task, instance_id, submission, server, max_volume=262144):
-    """Read-only readiness checks; no fake spawning, loading, clock changes or measurement."""
+    """Validate the manifest and observe output storage, chest clearance, and the declared
+    operating site.
+    """
     result = {
         **validate_submission(task, instance_id, submission, max_volume),
         'validation_scope': 'manifest_and_readonly_world_preflight',
@@ -824,7 +894,9 @@ def preflight_submission(task, instance_id, submission, server, max_volume=26214
 
 
 def sprint_wait(call, ticks, timeout_seconds=120):
-    """Run a bounded sprint, then wait for its real completion, not just elapsed ticks."""
+    """Start a bounded sprint and wait for sprint completion with the requested game ticks
+    elapsed.
+    """
     if ticks < 0 or timeout_seconds <= 0:
         raise ValueError('Invalid sprint wait')
     first = call('clock.query')
@@ -855,24 +927,62 @@ def sprint_wait(call, ticks, timeout_seconds=120):
 
 
 class Evaluator:
+    """Measure a submitted machine against its bound task and retain the acceptance evidence.
+
+    session is the evaluation ActionSession, supplying traced native calls and
+    cleanup. max_volume limits declared inspection blocks; max_chunks limits
+    distinct forced chunks across the submitted dimensions. reviewer is an
+    optional structural-evidence reviewer implementing review(task, submission,
+    evidence, report). validate() checks the manifest; run() selects configured
+    mode trials or one _run_single() measurement.
+
+    A single measurement validates the submission, loads its declared regions,
+    checks initial stocks and operating conditions, establishes its evaluator
+    actor, and runs warmup and production segments. Atomic snapshots combine
+    region, storage, and actor-inventory readbacks. Product and material checks
+    account for initial stock, actual recipe events, and per-segment output.
+
+    The report dictionary holds checks, metrics, verdict, task/submission hashes,
+    and cleanup errors. evidence retains the task, submission, and full native
+    observations. Finalization samples actor continuity, cleans up the session,
+    derives the verdict, and writes evidence.json and evaluation.json.
+
+    Example:
+        evaluator = Evaluator(session, reviewer=reviewer)
+        report = evaluator.run(instance, submission)
+
+    instance is the bound task.start result and submission declares the machine.
+    report contains the measured outcome and the path to its retained evidence.
+    """
+
     def __init__(self, session, max_volume=262144, reviewer=None, max_chunks=64):
+        """Bind the evaluation session, inspection limits, and optional structural reviewer."""
+
         self.session = session
         self.max_volume = max_volume
         self.max_chunks = max_chunks
         self.reviewer = reviewer
 
     def validate(self, instance, submission):
+        """Validate the bound task's submission and return its manifest summary."""
+
         return validate_submission(
             instance['task'], instance['id'], submission, self.max_volume
         )
 
     def run(self, instance, submission, tick_mode=None):
-        """根据任务验收模式执行测量，返回带任务身份的验收记录。"""
+        """Run the task's configured mode trials or a single measurement and return the
+        resulting report.
+        """
         if trials_for(instance['task']):
             return run_modes(self, instance, submission, tick_mode)
         return self._run_single(instance, submission, tick_mode)
 
     def _run_single(self, instance, submission, tick_mode=None, _mode_context=None):
+        """Measure one task mode, apply its acceptance checks, then clean up and persist the
+        finalized report.
+        """
+
         task = instance['task']
         evaluation_id = self.session.run_id
         context = _mode_context or {}
@@ -923,6 +1033,8 @@ class Evaluator:
         )
         evaluation_deadline = time.monotonic() + wall_budget
         report['metrics']['wall_timeout_seconds'] = wall_budget
+        # actor_guard: EvaluatorActor | None, installed when the task requires an operating
+        # player.
         actor_guard = None
         report['metrics'].update(
             measurement_mode=tick_mode,
@@ -931,7 +1043,11 @@ class Evaluator:
         )
 
         def check(name, passed, message, refs=None):
-            # The complete observations stay in evidence.json; do not repeat its entire growing ID list in every check.
+            """Append a pass/fail check with explicit evidence references or the shared
+            observation/submission path.
+            """
+            # Reference the observations array as one evidence path per check.
+
             paths = (
                 refs
                 if refs is not None
@@ -951,6 +1067,10 @@ class Evaluator:
             )
 
         def call(method, params=None, side='server'):
+            """Trace a native measurement call, unwrap its operation result, and sample actor
+            continuity when applicable.
+            """
+
             if time.monotonic() > evaluation_deadline:
                 raise RuntimeError(
                     'Infrastructure: acceptance wall-time resource limit exceeded; no task failure inferred'
@@ -983,11 +1103,16 @@ class Evaluator:
 
         from types import SimpleNamespace
 
+        # natural_wait expects a Bridge-style result wrapper around the unwrapped call() result.
         observed_server = SimpleNamespace(
             call=lambda method, params=None: {'result': call(method, params)}
         )
 
         def region(prefetched=None, prefetched_player=None):
+            """Aggregate declared-region telemetry and operating-player inventory from
+            prefetched or direct readbacks.
+            """
+
             harvest_readbacks = []
             wither_readbacks = []
             result = {
@@ -1176,6 +1301,10 @@ class Evaluator:
         }
 
         def snapshot(prefetched=None):
+            """Assemble output counts, physical slots, eligibility, and delivery metrics from
+            a storage snapshot.
+            """
+
             keys = list(refs)
             raw = (
                 prefetched
@@ -1195,6 +1324,8 @@ class Evaluator:
             )
             if len(raw['containers']) != len(keys):
                 raise RuntimeError('Incomplete atomic storage snapshot')
+            # values: dict[str, dict], keyed by declared locator hashes in the same order as the
+            # native container response.
             values = dict(zip(keys, raw['containers']))
             if task['id'] == 'medium.piglin_bartering.v1':
                 validate_barter_components(values, products)
@@ -1219,6 +1350,8 @@ class Evaluator:
             }
 
         def capture(allow_unloaded=False, include_storage=True):
+            """Read an evaluation snapshot and return region and optional storage summaries."""
+
             query = {
                 'regions': [
                     {**tile, 'dimension': r['dimension']}
@@ -1279,6 +1412,8 @@ class Evaluator:
             )
 
         try:
+            # Validate the declared machine and required evaluator capabilities before setting
+            # measurement conditions.
             validate_submission(task, instance['id'], submission, self.max_volume)
             if task.get('machine_limits'):
                 report['metrics']['machine_bounds'] = validate_machine_limits(task, submission)
@@ -1339,10 +1474,11 @@ class Evaluator:
                 True,
                 'Idle unfrozen 20 TPS target verified; selected tick mode: ' + tick_mode,
             )
+            # Freeze while establishing loaded regions, initial stocks, and the evaluator actor.
             call('clock.freeze')
             if maintained_weather:
-                # These mutations use the normal run-owned environment guard;
-                # session cleanup restores the original weather and gamerules.
+                # Apply the required weather and gamerule changes through the owned session.
+                # Session cleanup restores their earlier values.
                 weather_context = {'dimension': 'minecraft:overworld'}
                 call(
                     'command.run',
@@ -1509,8 +1645,8 @@ class Evaluator:
                 any(initial_region['block_counts'].get(block, 0) > 0 for block in group)
                 for group in task['mechanism_groups']
             )
-            # Waterlogged supports count as a real water probe even when no
-            # standalone water block exists in the submitted machine bounds.
+            # A waterlogged inspection point can establish the required water mechanism
+            # when the region block counts contain no standalone water block.
             if not mechanism_ok and any(
                 'waterlogged=true' in str(v) for v in evidence['inspection_points']
             ):
@@ -1607,8 +1743,8 @@ class Evaluator:
             )
             if not capacity['passed'] or not mechanism_ok:
                 return report
-            # Instrumentation creates a leased player at the declared AFK point.
-            # It never interprets arbitrary startup text as executable instructions.
+            # Create the task's evaluator player at the declared AFK position.
+            # The declared driver and tool fields below determine its operation.
             if context:
                 apply_controls(
                     call, context['original_submission'], context['binding'], 'select'
@@ -1744,6 +1880,8 @@ class Evaluator:
             evidence['conditions'] = conditions
 
             def find_rule(value):
+                """Find the first random-tick-speed value in nested world-condition records."""
+
                 if isinstance(value, dict):
                     if 'minecraft:random_tick_speed' in value:
                         return value['minecraft:random_tick_speed']
@@ -1835,6 +1973,7 @@ class Evaluator:
                         observed_server, ticks, timeout, require_natural=True
                     ),
                 )
+                # Request structural evidence review when a reviewer is configured.
                 if self.reviewer:
                     report['ai_review'] = self.reviewer.review(
                         task, submission, evidence, report
@@ -1845,6 +1984,8 @@ class Evaluator:
                         'Additional AI evidence review',
                     )
                 return report
+            # Capture the post-warmup baseline; pre-existing product stock becomes the output
+            # deduction below.
             start_region, start = capture()
             if order:
                 apply_controls(
@@ -1857,6 +1998,10 @@ class Evaluator:
             }
 
             def variant_snapshot(s):
+                """Return a storage-snapshot view whose counts are keyed by classified
+                variant IDs.
+                """
+
                 return {
                     **s,
                     'counts': classified_counts(
@@ -1876,6 +2021,8 @@ class Evaluator:
             variant_previous = variant_start
             variant_carry = dict(variant_debt)
             variant_segments = []
+            # inflight: dict[str, int], the initial product stock excluded from credited new
+            # output.
             inflight = {
                 p: max(0, item_stock(start_region, p) - start['counts'][p]) for p in products
             }
@@ -1902,6 +2049,8 @@ class Evaluator:
             segment_count = task['measurement'].get('segments', 1)
             segment_ticks = task['measurement']['window_ticks'] // segment_count
             segment_start = start
+            # carry: dict[str, int], the remaining initial-stock deduction carried between
+            # measurement segments.
             carry = dict(inflight)
             segment_metrics = []
             aggregate_segments = []
@@ -1916,6 +2065,8 @@ class Evaluator:
             world_segments = []
             previous_furnace_region = start_region
             furnace_segments = []
+            # Measure equal game-tick segments and collect their production and material-balance
+            # results.
             for _ in range(segment_count):
                 wait = (
                     sprint_wait(call, segment_ticks, timeout)
@@ -2021,8 +2172,8 @@ class Evaluator:
                 aggregate_segments.append(
                     aggregate_output_metrics(task, segment_metrics[-1], scope='segment')
                 )
-                # Carry initial in-flight debt across segments; do not repeatedly
-                # subtract it or let a reservoir pass as newly generated output.
+                # Consume the remaining initial-stock debt as collected output arrives.
+                # The next segment subtracts only the debt left after this segment.
                 carry = {
                     p: max(0, carry[p] - (end['counts'][p] - segment_start['counts'][p]))
                     for p in products
@@ -2051,6 +2202,7 @@ class Evaluator:
                 )
             for volume in submission.get('review_volumes', []):
                 call('observe.blocks', {**volume['bounds'], 'dimension': volume['dimension']})
+            # Use the last region observation for post-window stock and source checks.
             final_region = end_region
             if task.get('_suite_balance_items'):
                 report['metrics']['suite_final_stocks'] = {
@@ -2525,6 +2677,7 @@ class Evaluator:
                         'evidence': [],
                     }
                 )
+            # Request structural evidence review when a reviewer is configured.
             if self.reviewer:
                 try:
                     report['ai_review'] = self.reviewer.review(
@@ -2638,6 +2791,8 @@ class Evaluator:
                 else report['verdict'] == 'pass'
             )
             normalized = canonical_report(report)
+            # Keep the same report object: early return statements already refer to it before
+            # this finally block runs.
             report.clear()
             report.update(normalized)
             write_measurement(directory, evidence, report)

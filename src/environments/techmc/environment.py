@@ -1,7 +1,9 @@
-"""TechMC 公共请求入口：发现能力、交付任务、执行动作和接收验收结果。
+"""Dispatch TechMC protocol requests and retain their full execution receipts.
 
-handle 负责请求身份与回执账本，_dispatch 按操作分发，_primitive 连接执行后端。
-任务定义来自 task_catalog，机器验收由 evaluation 与 acceptance 规则计算。
+handle() serializes mutating requests and manages the request ledger.
+_dispatch() implements public operations; _primitive() selects the action
+backend. Task definitions come from task_catalog, and evaluation delegates
+machine checks to Evaluator and the acceptance modules.
 """
 
 import copy
@@ -16,6 +18,8 @@ import importlib
 
 
 def _module(name):
+    """Import a TechMC module relative to the current package when available."""
+
     return importlib.import_module((__package__ + '.' if __package__ else '') + name)
 
 
@@ -85,12 +89,52 @@ from .actions.validation import parameter_schema, action_catalog, check_action
 
 
 class Environment:
+    """Own one TechMC session's public request interface and task state.
+
+    session is an ActionSession, or an injected session with the same bridge and
+    cleanup interface. actor identifies its player. root is the configured
+    TechMC data Path, containing session, task-instance, and evaluation records.
+    task_selection defines the available catalogue. Optional task_stream and
+    task_worlds objects restrict visible visits and manage their retained worlds.
+
+    ledger maps request IDs to their payload fingerprint, original request,
+    world/visit identity, and full response. ledger_path persists that mapping.
+    _ledger_lock protects request admission and receipt updates; _mutation_lock
+    serializes mutating requests. _inflight counts active handle() calls and
+    evaluating marks the exclusive acceptance window. Returned views can be
+    smaller than the full feedback retained in the ledger.
+
+    task_progress retains completion and progress records by task ID;
+    task_activity records learner choices separately. machines stores submitted
+    machine/evaluation records. _active_task_instance is str | None and
+    _active_stream_position is int | None, binding the active task visit.
+    _stream_instances tracks task-instance IDs owned by this session.
+    used_game records whether session cleanup is needed; closed ends admission.
+
+    Example:
+        env = Environment(actor=actor, server_port=port)
+        request = {
+            'protocol_version': '1.0',
+            'request_id': 'describe-1',
+            'op': 'environment.describe',
+            'params': {'detail': 'manifest'},
+        }
+        feedback = env.handle(request)
+        env.close()
+
+    feedback is a protocol response containing the discovery manifest and
+    references to its versioned rule documents. The request and full response
+    remain in the session ledger after the environment is closed.
+    """
+
     def task_index(self, feedback):
+        """Project task-list feedback through the environment's task-index guidance view."""
+
         return _module('guidance').task_index(feedback)
 
     @staticmethod
     def _validated(function, *args, **kwargs):
-        """Only explicit pure preparation steps can establish not-started."""
+        """Wrap exceptions from a preparation function as OperationNotStarted."""
         try:
             return function(*args, **kwargs)
         except Exception as exc:
@@ -109,6 +153,10 @@ class Environment:
         task_selection=None,
         resume_existing=False,
     ):
+        """Select tasks, bind the session and locks, and restore persisted task state and
+        request receipts.
+        """
+
         selection_source = 'explicit'
         selected_port = server_port
         if selected_port is None and session is not None:
@@ -139,21 +187,33 @@ class Environment:
         self.max_evaluation_volume = max_evaluation_volume
         self.max_evaluation_chunks = max_evaluation_chunks
         self.ledger_path = self.session.directory / 'api-ledger.json'
+        # ledger: dict[str, dict], mapping public request IDs to canonical request/response
+        # records.
         self.ledger = {}
         self.evaluating = False
         self._ledger_lock = threading.RLock()
         self._mutation_lock = threading.RLock()
+        # task_stream: TaskStream | None; the host installs sequential task delivery before
+        # discovery.
         self.task_stream = None
+        # root: Path under the configured data root; source-owned assets have their own
+        # ASSET_ROOT.
         self.root = ROOT
+        # _stream_instances: set[str] of task-instance IDs created or restored for this session.
         self._stream_instances = set()
         self.task_progress = {}
         self.machines = []
         self.infrastructure_events = []
+        # task_worlds: TaskWorldManager | None, installed by enable_task_worlds().
         self.task_worlds = None
+        # _active_task_instance: str | None, identifying the task instance bound to the active
+        # visit.
         self._active_task_instance = None
         self._active_stream_position = None
         self.task_activity = {}
         self._inflight = 0
+        # _evaluation_children: list[ActionSession], retained until their evaluation heartbeat
+        # threads stop.
         self._evaluation_children = []
         state_path = self.session.directory / 'environment-state.json'
         self._restored_state = state_path.exists()
@@ -174,6 +234,8 @@ class Environment:
             self.ledger = json.loads(self.ledger_path.read_text(encoding='utf-8'))
 
     def _persist_state(self, **updates):
+        """Write task, machine, and active-visit state with the supplied field updates."""
+
         state = {
             'schema_version': 1,
             'actor': self.actor,
@@ -189,17 +251,23 @@ class Environment:
         atomic_json(self.session.directory / 'environment-state.json', state)
 
     def _save_ledger(self):
+        """Persist the full request ledger while holding its lock."""
+
         with self._ledger_lock:
             atomic_json(self.ledger_path, self.ledger)
 
     def enable_task_worlds(self, **configuration):
-        """Install trusted per-task world switching before the first request."""
+        """Create the host-managed retained task-world service before discovery or during
+        saved-state restoration.
+        """
         if self.task_worlds is not None or (self.ledger and not self._restored_state):
             raise ValueError('Task workspaces must be configured before discovery')
         self.task_worlds = _module('task_worlds').TaskWorldManager(self, **configuration)
         return self.task_worlds
 
     def task_workspace_status(self):
+        """Return the world manager's status or a disabled marker."""
+
         return (
             self.task_worlds.status()
             if self.task_worlds is not None
@@ -207,10 +275,8 @@ class Environment:
         )
 
     def resume_task_binding(self, binding):
-        """Trusted checkpoint restoration; retain the original task instance.
-
-        This method is intentionally absent from the agent RPC dispatcher. It
-        never repeats a game command or creates a replacement task instance.
+        """Restore a verified saved task/profile/world binding and return its continuation
+        metadata.
         """
         with self._ledger_lock:
             if (
@@ -286,7 +352,9 @@ class Environment:
             return copy.deepcopy(self.continuation)
 
     def release_task_workspace(self, outcome):
-        """Trusted host boundary: preserve the old world before releasing binding."""
+        """Finish session cleanup in the current world, release that workspace, and clear the
+        active visit binding.
+        """
         with self._ledger_lock:
             if self.evaluating or self._inflight:
                 raise ValueError(
@@ -326,7 +394,7 @@ class Environment:
                 self.task_worlds is not None
                 and self.task_worlds.status().get('active_task_id') is not None
             ):
-                # Cleanup must run while the old workspace is still attached.
+                # Clean up session resources while the completed task's world is still attached.
                 if self.used_game:
                     errors = self.session.cleanup()
                     if errors:
@@ -352,12 +420,14 @@ class Environment:
             if self.task_worlds is not None:
                 receipt = self.task_worlds.release(outcome)
             self._persist_state(active_task_instance=None, active_stream_position=None)
+            # _active_task_instance: str | None, identifying the task instance bound to the
+            # active visit.
             self._active_task_instance = None
             self._active_stream_position = None
             return receipt
 
     def enable_task_stream(self, **configuration):
-        """Trusted experiment setup, before discovery; never exposed as an RPC."""
+        """Create the host-configured task stream and select its persisted state file."""
         if self.task_stream is not None:
             raise ValueError('Task delivery must be configured once before discovery')
         if self.ledger and not (self.session.directory / 'task-stream.json').exists():
@@ -369,6 +439,10 @@ class Environment:
         return self.task_stream
 
     def _visible_tasks(self, difficulty=None, world_type=None):
+        """List tasks visible through the current stream or selected catalogue, with optional
+        filters.
+        """
+
         return (
             self.task_stream.visible(difficulty, world_type)
             if self.task_stream
@@ -376,6 +450,8 @@ class Environment:
         )
 
     def _visible_task(self, task_id):
+        """Get one task through the current stream's visibility rules or selected catalogue."""
+
         return (
             self.task_stream.get(task_id)
             if self.task_stream
@@ -383,6 +459,8 @@ class Environment:
         )
 
     def _primitive(self, action, request_id):
+        """Validate an action, select its execution backend, and return the backend result."""
+
         method = action['method']
         params = action['params']
         backend = action.get('executor', 'direct')
@@ -397,8 +475,8 @@ class Environment:
                     ValueError('Start the current task before accessing its workspace')
                 )
             self._validated(self._instance, self._active_task_instance)
-        # Knowledge and lightweight diagnostics never need an executor model,
-        # even when the caller applies a global game-executor preference.
+        # Knowledge and lightweight diagnostics use the direct backend.
+        # This overrides an executor preference attached to the action.
         if method in KNOWLEDGE_METHODS | DIRECT_DIAGNOSTICS:
             backend = 'direct'
         if method == 'experiment.resources':
@@ -433,8 +511,9 @@ class Environment:
             self.session.start_heartbeat()
         if action['side'] == 'client' and method.startswith('action.'):
             self.session.client_required = True
-        # Keep the public ledger request while ActionSession records the real
-        # native wire params. The CLI boundary uses the inverse validation view.
+        # Keep public request parameters in the ledger and convert a separate step to native
+        # wire parameters.
+        # The CLI backend converts that wire step back into its public validation form.
         step = {
             k: v
             for k, v in _module('actions.parameters').native_action(action).items()
@@ -452,6 +531,10 @@ class Environment:
         return self.session.invoke(step)
 
     def _instance(self, instance_id):
+        """Load a task instance and check its session, visit, workspace, and
+        server-generation bindings.
+        """
+
         if not isinstance(instance_id, str) or not all(
             c.isalnum() or c in '-_' for c in instance_id
         ):
@@ -493,10 +576,10 @@ class Environment:
         return value
 
     def _dispatch(self, op, params, request_id):
-        """按 op 执行能力发现、任务交付、动作调用或机器验收。
-
-        分支负责各操作的业务状态，公共请求身份与回执由 _handle 维护。
+        """Execute one public operation and return its result for the request handler to wrap
+        and record.
         """
+        # Read public documents, schemas, action contracts, and retained feedback.
         if op == 'environment.document':
             return _module('discovery_views').document(self, params, request_id)
         if op == 'environment.status':
@@ -548,6 +631,7 @@ class Environment:
                 return _module('response_views').selected(value, params['fields'])
             if 'path' in params:
                 for key in params['path'].split('.'):
+                    # value becomes the selected JSON child at each dotted-path segment.
                     value = value[int(key)] if isinstance(value, list) else value[key]
                 if isinstance(value, list):
                     return {
@@ -617,6 +701,7 @@ class Environment:
                     'A retained task workspace cannot be reset; ask the experiment host to reconcile its world receipt'
                 )
             return _module('server_recovery').recover(self, **params)
+        # Build discovery content and select its full, summary, or versioned-manifest view.
         if op == 'environment.describe':
             description = {
                 'protocol_version': VERSION,
@@ -783,6 +868,7 @@ class Environment:
             )
         if op == 'tasks.get':
             return self._validated(self._visible_task, params['task_id'])
+        # Bind the task, selected product profile, and retained workspace for this visit.
         if op == 'task.start':
             if (
                 not self.task_stream
@@ -877,6 +963,7 @@ class Environment:
                 'validation_scope': 'manifest_only',
                 'world_preflight': {'status': 'not_requested'},
             }
+        # Validate the submission before starting an exclusive measurement session.
         if op == 'evaluation.run':
             if self.evaluating:
                 raise OperationNotStarted(
@@ -907,8 +994,12 @@ class Environment:
                 instance['task'],
                 params.get('mode', 'auto'),
             )
+            # reviewer: AIReviewer | None; hybrid evaluation supplies the structural-review
+            # implementation.
             reviewer = None
             evaluation_id = 'eval-' + str(uuid.uuid4())
+            # child: ActionSession | None, with its own evaluation ID, bridge connections, and
+            # heartbeat.
             child = None
             try:
                 if policy['effective'] == 'hybrid':
@@ -998,8 +1089,11 @@ class Environment:
                 c.isalnum() or c in '-_' for c in evaluation_id
             ):
                 raise ValueError('Invalid evaluation ID')
-            # A failed disk write must not make a live controller return an older
-            # pre-recovery report. The ledger is authoritative for this attempt.
+            # Read the current ledger report before loading the saved evaluation file.
+            # The ledger can contain a newer normalized report after a failed persistence
+            # attempt.
+            # report: dict | None, selected from retained evaluation.run responses before
+            # checking the saved file.
             report = next(
                 (
                     copy.deepcopy(e['response']['result'])
@@ -1048,9 +1142,8 @@ class Environment:
         raise ValueError('Unsupported operation')
 
     def handle(self, request):
-        """接收一次公共请求，串联执行锁、超时记录与请求处理。
-
-        请求内容、执行状态与回执进入会话账本，重复请求按已有记录处理。
+        """Serialize mutations, count active calls, and return the recorded or newly
+        dispatched request response.
         """
         with self._ledger_lock:
             self._inflight += 1
@@ -1062,8 +1155,8 @@ class Environment:
         except Exception as exc:
             if isinstance(getattr(exc, 'execution_agent_failure', None), ExecutionAgentError):
                 raise
-            # Last boundary: reporting/recovery must not tear down a caller after
-            # an operation may already have executed. Never redispatch here.
+            # Convert finalization errors into uncertain feedback at this outer boundary.
+            # Return the error with its request reference after the single dispatch attempt.
             contract = _module('failure_contract')
             rid = (
                 request.get('request_id', 'invalid') if isinstance(request, dict) else 'invalid'
@@ -1102,8 +1195,8 @@ class Environment:
                 }
                 result['infrastructure']['state_error'] = contract.fault(exc)
             validate('response', result)
-            # Retain an existing canonical record, rather than replacing evidence
-            # with this boundary error. A fresh request can query feedback.get.
+            # Keep any existing canonical ledger receipt available through feedback.get.
+            # This boundary response describes the finalization error separately.
             return result
         finally:
             with self._ledger_lock:
@@ -1111,9 +1204,21 @@ class Environment:
 
     @staticmethod
     def _mutation_request(request):
+        """Classify a request as mutating from its public operation and action-effect
+        metadata.
+        """
+
         return _action_catalog.request_effect(request) != 'read_only'
 
     def _handle(self, request):
+        """Validate, admit, dispatch, and finalize one request against the session ledger.
+
+        Existing IDs use their retained receipt unless native journal lookup is
+        permitted for the same server generation. New dispatches start with a
+        persisted pending receipt. Normalize execution certainty, recovery details,
+        and evaluation results before saving the full response and selecting its view.
+        """
+
         contract = _module('failure_contract')
         request_id = (
             request.get('request_id', 'invalid') if isinstance(request, dict) else 'invalid'
@@ -1133,10 +1238,17 @@ class Environment:
         fingerprint = None
         dispatched = False
         local_diagnostic = False
+        # owned_entry becomes true after this call claims a ledger entry for response updates.
         owned_entry = False
+        # known_state: str | None, populated from typed backend or pre-dispatch execution
+        # evidence.
         known_state = None
         executor_interruption = None
+        # canonical_persisted records whether the finalized full response reached the ledger
+        # file.
         canonical_persisted = False
+        # Keep the prior progress mapping for rollback if a newly recorded pass cannot be
+        # persisted.
         progress_before = copy.deepcopy(self.task_progress)
         try:
             json.dumps(request, allow_nan=False)
@@ -1149,7 +1261,8 @@ class Environment:
                 raise ValueError('Environment session is closed')
             fingerprint = contract.request_hash(request)
             with self._ledger_lock:
-                # 请求身份、内容指纹和已有回执在账本中一起读取，重复请求沿已有状态继续。
+                # Read the request fingerprint and previous receipt together under the ledger
+                # lock.
                 previous = self.ledger.get(request_id)
                 if previous:
                     if (
@@ -1169,7 +1282,8 @@ class Environment:
                                 'Mutation request belongs to another task workspace or visit; use feedback.get to inspect its historical result'
                             )
                     prior = contract.response(previous['response'], request)
-                    # Only a native, same-generation journal lookup may redispatch.
+                    # A pending server request can consult its native journal after checking the
+                    # same server generation.
                     lookup = prior.get('execution', {}).get('retry') == 'same_request_only'
                     if prior['status'] == 'pending_or_unknown' and lookup:
                         try:
@@ -1228,6 +1342,8 @@ class Environment:
                         'Acceptance window is exclusive; only knowledge queries are available'
                     )
                 check_action(action)
+            # This marks entry into _dispatch; typed preparation errors can still establish
+            # not_started.
             dispatched = True
             result = public_result(self._dispatch(request['op'], request['params'], request_id))
             if request['op'] == 'task.start' and isinstance(result, dict):
@@ -1250,6 +1366,8 @@ class Environment:
             executor_failure = getattr(exc, 'execution_agent_failure', None)
             if isinstance(executor_failure, ExecutionAgentError):
                 executor_interruption = exc
+                # exc changes from the propagated interruption to its ExecutionAgentError
+                # evidence object.
                 exc = executor_failure
             elif not isinstance(exc, Exception):
                 raise
@@ -1307,8 +1425,8 @@ class Environment:
                     'fault': contract.fault(exc),
                     'note': 'Task-world transition is blocked or uncertain. The host must inspect its original lifecycle receipt; no new world switch was retried.',
                 }
-            # A runtime ValueError can follow side effects. Only pre-dispatch
-            # validation establishes that the operation never started.
+            # A runtime exception can occur after execution begins.
+            # Use the typed pre-dispatch or backend execution state to establish certainty.
         req = request if isinstance(request, dict) else {}
         response['execution'] = contract.execution(req, response, dispatched, known_state)
         if response['status'] == 'pending_or_unknown' and owned_entry:
@@ -1395,7 +1513,7 @@ class Environment:
                 'stage': 'request',
                 'fault': copy.deepcopy(response['error']),
             }
-        # Recovery exceptions cannot erase an already produced independent report.
+        # Normalize and persist an independent report after attaching recovery details.
         if (
             req.get('op') == 'evaluation.run'
             and response['status'] == 'completed'
@@ -1417,7 +1535,9 @@ class Environment:
                 try:
                     contract.persist_report(ROOT, measured)
                 except Exception:
-                    pass  # The returned persistence error makes no durability claim.
+                    # The returned response retains the persistence error if the second write
+                    # also fails.
+                    pass
                 try:
                     self._record_machine(req, measured)
                 except Exception:
@@ -1427,6 +1547,8 @@ class Environment:
             if response['status'] != 'pending_or_unknown'
             else response['execution']
         )
+        # Normalize the full response before saving its canonical ledger copy and selecting a
+        # return view.
         response = contract.response(response, req)
         if owned_entry:
             self.ledger[request_id]['response'] = copy.deepcopy(response)
@@ -1467,6 +1589,8 @@ class Environment:
         return contract.view(response, req.get('response') if fingerprint is not None else None)
 
     def raw_feedback(self, request_id, request=None):
+        """Return full retained feedback when its ID and optional request fingerprint match."""
+
         if not isinstance(request_id, str):
             return None
         entry = self.ledger.get(request_id, {})
@@ -1489,6 +1613,10 @@ class Environment:
         )
 
     def _record_machine(self, request, report):
+        """Persist the evaluated machine and update completion state for an independent
+        passing report.
+        """
+
         submission = request['params']['submission']
         entry = self.ledger.get(request.get('request_id'), {})
         binding = {
@@ -1540,6 +1668,10 @@ class Environment:
         self.task_progress = progress
 
     def close(self):
+        """Mark the environment closed and return session cleanup errors when game resources
+        were used.
+        """
+
         if self.closed:
             return {'closed': True, 'cleanup_errors': []}
         self.closed = True

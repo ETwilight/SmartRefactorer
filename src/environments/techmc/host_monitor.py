@@ -1,4 +1,4 @@
-"""Independent OS sampling survives stalled game RPCs; summaries label sampled peaks."""
+"""Record process/host memory samples, reported JVM peaks, and exit diagnostics."""
 
 import json
 import os
@@ -16,7 +16,30 @@ else:
 
 
 class Monitor:
+    """Sample one process and retain memory summaries alongside the host records.
+
+    pid is the sampled process ID and directory is its existing output Path.
+    interval sets the sampling period. summary restores memory-summary.json or
+    starts with empty counters; it retains sampled RSS peaks, OS high-water
+    marks, host-availability minima, and heap/nonheap peaks supplied by heap().
+    lock serializes updates and stop_event ends the background loop.
+
+    start() assigns and starts thread. sample() writes JSONL, CSV, and the
+    current summary; heap() updates its in-memory JVM peaks. close() stops and
+    joins the thread, adds the platform child-process peak when available,
+    and writes the final summary.
+
+    Example:
+        monitor = Monitor(pid, directory).start()
+        monitor.close()
+
+    The monitor starts periodic OS sampling, then stops and saves its accumulated
+    summary. The owning experiment keeps it running across the server lifecycle.
+    """
+
     def __init__(self, pid, directory, interval=1):
+        """Bind the process, output directory, sampling interval, and restored peak summary."""
+
         self.pid = pid
         self.directory = Path(directory)
         self.interval = interval
@@ -34,10 +57,17 @@ class Monitor:
         )
 
     def sample(self):
+        """Take and persist one process/host memory sample while holding the monitor lock."""
+
         with self.lock:
             self._sample()
 
     def _sample(self):
+        """Update peak counters and append the sampled values or read error to JSONL and CSV
+        files.
+        """
+        # sample: dict of timestamp/PID plus memory counters or their read-error message.
+
         sample = {'wall_ns': time.time_ns(), 'pid': self.pid}
         try:
             sample.update(process_memory(self.pid))
@@ -85,6 +115,8 @@ class Monitor:
             )
 
     def heap(self, value):
+        """Update sampled JVM heap and nonheap peaks from the supplied telemetry."""
+
         with self.lock:
             self.summary['sampled_peak_heap_bytes'] = max(
                 self.summary.get('sampled_peak_heap_bytes', 0), value['heap_used_bytes']
@@ -95,7 +127,13 @@ class Monitor:
             )
 
     def start(self):
+        """Start the background sampling thread and return this monitor."""
+
         def work():
+            """Sample at the configured interval until stopped, retaining sampling errors in
+            the summary.
+            """
+
             while not self.stop_event.is_set():
                 try:
                     self.sample()
@@ -108,6 +146,10 @@ class Monitor:
         return self
 
     def close(self):
+        """Stop sampling, join its thread, add available child-process peak data, and save
+        the final summary.
+        """
+
         self.stop_event.set()
         self.thread.join(timeout=5)
         if os.name != 'nt':
@@ -120,6 +162,10 @@ class Monitor:
 
 
 def diagnostics(directory, exit_code, error=None):
+    """Classify the supplied exit from log/code evidence and save process, JVM-artifact, and
+    available kernel-log diagnostics.
+    """
+
     directory = Path(directory)
     path = directory / 'supervisor.log'
     if path.exists():

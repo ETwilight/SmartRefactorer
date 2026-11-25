@@ -1,4 +1,4 @@
-"""One isolated native method process, started only after host allocation succeeds."""
+"""Preflight and execute a selected method inside its allocated environment connection."""
 
 import argparse
 import hashlib
@@ -17,6 +17,10 @@ from .lifecycle import managed_environment
 
 
 def preflight(config):
+    """Validate method dependencies and explicit continuation settings, then return the
+    environment provider.
+    """
+
     if config['method'] == 'smartrefactorer':
         from adapters.methods.smartrefactorer.worker import preflight as sr_preflight
 
@@ -43,6 +47,7 @@ def preflight(config):
                 )
             state = load_continuation(resume_source, recovery_approval=approval)
         else:
+            # state: dict containing the saved continuation report and method checkpoint.
             state = load_continuation(resume_source)
         limits = {
             'total_tokens': config['token_budget'],
@@ -70,6 +75,8 @@ def preflight(config):
 
 
 def run(config):
+    """Delegate SR to its worker or connect and run the selected shared method lifecycle."""
+
     if config['method'] == 'smartrefactorer':
         from adapters.methods.smartrefactorer.worker import run as sr_run
 
@@ -101,17 +108,20 @@ def run(config):
                     {'type': type(exc).__name__, 'message': str(exc)},
                 )
             except Exception:
-                pass  # Diagnostic failure must not mask the primary error.
+                # Keep the original exception when writing the cleanup diagnostic also fails.
+                pass
 
 
 def _run_connected(config, layout, provider, environment):
-    """Run under the single connection owner's finally, including source archival."""
+    """Archive method and environment sources, run the plugin, and save its report and
+    layout.
+    """
     options = {
         **config.get('options', {}),
         'auditor_factory': lambda folder: provider.auditor(folder, environment),
     }
-    # Config/launch files may contain only an untrusted receipt path. The
-    # verified authorization is ephemeral and supplied by the provider afresh.
+    # Obtain the continuation approval from the provider for this launch.
+    # Only its receipt path is carried in the saved configuration.
     options.pop('_resume_recovery_approval', None)
     get_approval = getattr(provider, 'recovery_approval', None)
     approval = get_approval(config) if callable(get_approval) else None
@@ -127,7 +137,9 @@ def _run_connected(config, layout, provider, environment):
     )
     research = Path(__file__).resolve().parents[1]
     workspace = research.parent
+    # sources: dict[str, str], mapping workspace-relative source paths to SHA-256 hashes.
     sources = {}
+    # paths: list[Path], checked during the plugin run for source modifications.
     paths = []
     directories = [
         research / name
@@ -139,7 +151,7 @@ def _run_connected(config, layout, provider, environment):
             'algorithms/psn' if config['method'] == 'psn' else 'algorithms/baseline',
         )
     ]
-    # Pin each deferred method's real sources, not just the plugin facade.
+    # Include each selected algorithm package in the run's source archive and revision checks.
     if config['method'] in ('speedrunner', 'skillzip'):
         directories.append(
             research
@@ -225,6 +237,10 @@ def _run_connected(config, layout, provider, environment):
 
 
 def main(argv=None):
+    """Check or execute a launch configuration, record worker errors, and return the CLI exit
+    code.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--check', action='store_true')
@@ -260,7 +276,7 @@ def main(argv=None):
                 encoding='utf-8',
             )
         except Exception:
-            pass  # A failed diagnostic must preserve the original control/error.
+            pass  # Keep the original exception when writing the worker diagnostic also fails.
         raise
 
 

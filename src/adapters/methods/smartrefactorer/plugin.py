@@ -1,4 +1,4 @@
-"""Register the formal algorithm through its method adapter and generic host."""
+"""Construct the SR method and task runner from a configured run context."""
 
 from runtime.task_session import SessionRunner
 from .policy import MethodAdapter
@@ -6,7 +6,22 @@ from .checkpoint import ContinuationService
 
 
 class Plugin:
+    """Create the SR adapter and runner used by the method registry.
+
+    run() receives a RunContext containing the environment, output layout, task
+    goal, token limits, and method options. It configures the embedding backend and
+    continuation source, then runs SessionRunner with MethodAdapter.
+
+    Example, after the worker has prepared its RunContext::
+
+        report = Plugin().run(context)
+
+    report contains the task rounds, model usage, and method summary from the run.
+    """
+
     def run(self, context):
+        """Build the configured method adapter and return the task runner's report."""
+
         options = context.options or {}
         source = options.get('smartrefactorer_resume_from')
         return SessionRunner(

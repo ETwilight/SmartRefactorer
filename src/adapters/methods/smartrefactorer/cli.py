@@ -1,4 +1,4 @@
-"""One entry point for isolated method plugins and capacity-aware environment providers."""
+"""SmartRefactorer run and batch commands with explicit continuation options."""
 
 import argparse
 import json
@@ -15,10 +15,12 @@ RESEARCH = Path(__file__).resolve().parents[3]
 
 
 def interpreter(method):
+    """Return the Python interpreter configured for the requested method."""
+
     if method != 'smartrefactorer':
         raise ValueError('This entry point runs SmartRefactorer only')
-    # Run with the explicitly selected dependency environment, not another
-    # algorithm's directory. Worker preflight checks its required packages.
+    # Select the dependency environment used by this method's worker.
+
     path = Path(sys.executable).resolve()
     if not path.is_file():
         raise ValueError('Method interpreter is missing: ' + str(path))
@@ -26,6 +28,8 @@ def interpreter(method):
 
 
 def parser():
+    """Build the run and batch command-line options."""
+
     result = argparse.ArgumentParser(description=__doc__)
     sub = result.add_subparsers(dest='action', required=True)
     for action in ('run', 'batch'):
@@ -99,6 +103,8 @@ def parser():
 
 
 def main(argv=None):
+    """Prepare the selected run or batch configuration and launch or check its workers."""
+
     argument_parser = parser()
     args = argument_parser.parse_args(argv)
     if args.action == 'status':
@@ -193,8 +199,8 @@ def main(argv=None):
         }
         if resume_launch is not None:
             options = dict(resume_launch.get('options', {}))
-            # Startup recovery receipts authenticate one exact parent checkpoint;
-            # they cannot be inherited by a later, successfully resumed segment.
+            # The startup-recovery receipt names this parent checkpoint.
+            # A later continuation segment supplies its own receipt.
             for key in list(options):
                 if key.endswith(('_resume_from', '_resume_recovery_receipt')):
                     options.pop(key)
@@ -231,7 +237,7 @@ def main(argv=None):
         config['controller_mb'] = 4096
         config_path = layout.root / 'launch.json'
         write(config_path, config)
-        # Dependency checks use each method's own interpreter and consume zero model tokens.
+        # Run each method's dependency checks in its configured interpreter.
         check = subprocess.run(
             [
                 str(interpreter(method)),

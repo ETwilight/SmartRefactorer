@@ -1,4 +1,4 @@
-"""Common report rendering; no dependency on a method implementation."""
+"""Write shared JSON and HTML reports from recorded rounds, calls, and audit artifacts."""
 
 import json
 from html import escape
@@ -7,16 +7,33 @@ import uuid
 
 
 class _HtmlSink:
+    """Write appended HTML fragments directly to an open text stream.
+
+    stream provides write(str). __iadd__ writes one fragment and returns this
+    sink so the renderer can append fragments without accumulating a full page.
+    The caller opens and closes the stream.
+
+    Example:
+        page = _HtmlSink(stream)
+        page += '<!doctype html>'
+
+    The HTML fragment is written immediately to stream.
+    """
+
     def __init__(self, stream):
+        """Bind the open text stream used by the renderer."""
+
         self.stream = stream
 
     def __iadd__(self, text):
+        """Write one text fragment and return this sink for subsequent appends."""
+
         self.stream.write(text)
         return self
 
 
 def write_html(folder, report):
-    """Stream derived HTML; never hold a second complete run ledger in RAM."""
+    """Render report.html through a temporary file, then replace the previous HTML file."""
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     temporary = folder / ('report.html.' + uuid.uuid4().hex + '.tmp')
@@ -26,6 +43,8 @@ def write_html(folder, report):
 
 
 def _write_html(folder, report, stream):
+    """Write summary tables, audit links, and recorded call details to the supplied stream."""
+
     rows = []
     for r in report['rounds']:
         outcomes = '; '.join(
@@ -104,7 +123,9 @@ def _write_html(folder, report, stream):
 
 
 def finalize_report(folder, report, *, render=None):
-    """Persist authoritative JSON first; optional projections cannot erase it."""
+    """Save report.json, render the shared views, and record any projection errors in the
+    report.
+    """
     from audit.recorder import save_json
     from .layout import RunLayout
 

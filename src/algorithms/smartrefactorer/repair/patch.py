@@ -1,7 +1,8 @@
-"""Patch：逐个修正 Reflect 指定的组件，再返回 Validate。
+"""Patch the components selected by Reflect, then validate the candidate again.
 
-repair_targets 给出组件顺序，repair_cursor 标记已完成的交付。
-每次应用绑定组件版本，候选中其余已完成工作随状态一起保存。
+repair_targets orders the component IDs and repair_cursor marks the next one.
+A delivered patch is applied to the version read for that edit, and the updated
+candidate and cursor are saved together.
 """
 
 import copy
@@ -9,11 +10,12 @@ from ..state import Phase
 
 
 def patch_components(controller):
-    """Apply only the attributed components, resuming the saved repair cursor."""
+    """Continue the repair list and return the phase reached after applying its patches."""
     state = controller.state
+    # issues: dict[str, list[dict]], grouping Reflect's requested fixes by component ID.
     issues = state.repair_diagnosis['G']
     while state.repair_cursor < len(state.repair_targets):
-        # repair_cursor 指向当前待修组件，前面已经应用的补丁保留在候选中。
+        # Earlier targets already have their applied patches in the candidate.
         component_id = state.repair_targets[state.repair_cursor]
         if component_id not in state.candidate:
             return Phase.PROPOSE
@@ -38,7 +40,7 @@ def patch_components(controller):
             return Phase.BLOCKED
         if delivery.get('conflict'):
             return Phase.PROPOSE
-        # 补丁按修复开始时读取的组件哈希应用，然后保存完成进度。
+        # Apply against the source version read above, then save the advanced repair cursor.
         controller.apply(delivery, component_id, component['hash'])
         state.repair_cursor += 1
         controller.save()

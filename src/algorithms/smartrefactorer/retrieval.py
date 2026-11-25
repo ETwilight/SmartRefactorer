@@ -1,14 +1,15 @@
-"""Retrieve：根据当前任务、维修诊断或维护机会检索候选技能版本。
+"""Find skills related to a task, repair diagnosis, or maintenance goal.
 
-检索按描述 embedding 排序，保留 top_k 与复用计划明确选中的组件，
-同时返回未选组件及全部相似度分数。
+The task query and component descriptions are embedded together. Retrieval keeps
+the highest-scoring components and any components already chosen by the reuse
+plan, returning their records, omitted IDs, and similarity scores.
 """
 
 import json
 
 
 def retrieve(controller, query):
-    """Rank candidate skill descriptions and retain explicitly chosen versions."""
+    """Rank candidate descriptions and include the reuse plan's chosen components."""
     state = controller.state
     components = state.candidate
     names = sorted(components)
@@ -20,13 +21,15 @@ def retrieve(controller, query):
         )
         for n in names
     ]
+    # vectors: list[list[float]]; the first vector is the query, followed by component vectors.
     vectors = controller.embed(texts)
     q = vectors[0]
+    # ranked: list[tuple[str, float]], pairing each component ID with its similarity score.
     ranked = sorted(
         zip(names, [sum((a * b for a, b in zip(q, v))) for v in vectors[1:]]),
         key=lambda x: (-x[1], x[0]),
     )
-    # 复用计划已经选定的组件与相似度 top_k 取并集。
+    # Keep the plan's chosen components even when they fall outside the top-k ranking.
     explicit = {
         v.get('component_id') for v in (state.reuse_plan or {}).get('choices', {}).values()
     }

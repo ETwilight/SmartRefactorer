@@ -1,4 +1,4 @@
-"""Supply SR entrypoints to generic allocation/heartbeat/final-save ownership."""
+"""Run the SR worker through environment allocation, heartbeat, and final report handling."""
 
 from pathlib import Path
 from runtime.allocation import main as run_allocated
@@ -7,6 +7,8 @@ from .registry import ENVIRONMENTS, resolve
 
 
 def main(argv=None):
+    """Pass SR provider and worker callbacks to the shared allocated-run entrypoint."""
+
     return run_allocated(
         argv,
         preflight=preflight,

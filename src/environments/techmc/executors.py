@@ -1,4 +1,4 @@
-"""Interchangeable primitive execution. This layer never chooses the next task."""
+"""Execute a selected primitive through a subprocess bridge or an inspecting model executor."""
 
 import json
 from pathlib import Path
@@ -20,13 +20,35 @@ from audit import TokenBudgetExceeded
 
 
 class CliBridge:
+    """Send native bridge calls through the TechMC primitive CLI subprocess.
+
+    original is the Bridge whose run, actor, side, URL, and token path are
+    forwarded in the CLI request. url, remote, and token_file expose the same
+    connection metadata to ActionSession. call() uses the current Python
+    interpreter to run api.py --primitive and unwraps its JSON response.
+
+    Example:
+        cli = CliBridge(server)
+        feedback = cli.call('clock.query', request_id='clock-1')
+
+    feedback is the native RPC envelope returned by the server, with the clock
+    fields under result. Returned CLI errors retain any native request/feedback
+    evidence in a BridgeError.
+    """
+
     def __init__(self, original):
+        """Retain the original bridge and expose its connection metadata."""
+
         self.original = original
         self.url = original.url
         self.remote = getattr(original, 'remote', None)
         self.token_file = getattr(original, 'token_file', None)
 
     def call(self, method, params=None, request_id=None):
+        """Run one validated primitive through the CLI and return its native RPC result
+        envelope.
+        """
+
         request = {
             'method': method,
             'params': params or {},
@@ -48,6 +70,7 @@ class CliBridge:
         )
         if process.returncode:
             raise RuntimeError('CLI executor failed: ' + process.stderr[-1000:])
+        # process.stdout is str; value is the decoded CLI status/result wrapper.
         value = json.loads(process.stdout)
         if value.get('status') != 'ok':
             native_request = value.get('native_request')
@@ -68,9 +91,33 @@ class CliBridge:
 
 
 class ExecutionAgentError(BridgeError):
-    """Executor failure with certainty about the selected primitive, not inspections."""
+    """Carry executor evidence and the selected primitive's execution state.
+
+    execution_state is supplied by execute() for the requested primitive.
+    original_exception retains the underlying cause. executor_evidence contains
+    copied execution output, model-call metadata, inspection observations, and
+    any correlated native or passive-wait feedback. requested_started records
+    whether invoke(action) was entered.
+
+    Example, in the executor failure handler:
+        failure = ExecutionAgentError(
+            exc,
+            state=state,
+            result=executed,
+            calls=calls,
+            observations=observations,
+            requested_started=requested_started,
+        )
+
+    Ordinary failures raise this object. Control and budget exceptions carry it
+    in execution_agent_failure while retaining their original exception identity.
+    """
 
     def __init__(self, cause, *, state, result, calls, observations, requested_started):
+        """Retain the original cause, selected-action state, model calls, and correlated
+        execution evidence.
+        """
+
         native = cause if requested_started and isinstance(cause, BridgeError) else None
         super().__init__(
             str(cause),
@@ -98,17 +145,38 @@ class ExecutionAgentError(BridgeError):
 
 
 class ExecutionAgent:
-    """Optional bounded verifier/executor of ONE already selected primitive.
+    """Inspect and execute a selected primitive through a bounded sequence of model turns.
 
-    The model can inspect or request the exact primitive once. It cannot rewrite
-    its parameters, add another mutation, choose a task or alter evaluation goals.
+    transport is an optional structured-call backend; max_rounds limits model
+    turns in execute(). action is the selected action dictionary. invoke accepts
+    an action dictionary and returns its execution result. Model decisions can
+    inspect allowed read methods, execute the selected action once, and finish.
+
+    execute() retains model-call metadata and inspection/execution observations.
+    requested_started marks entry into the selected action's callback, while
+    requested_returned marks its return. request_identity supplies the complete
+    native identity used to correlate a passive wait's terminal error.
+
+    Example:
+        executor = ExecutionAgent()
+        record = executor.execute(action, invoke, request_identity=identity)
+
+    record contains the selected action's result and the executor's model calls
+    and observations. Environment._primitive() supplies invoke and identity for
+    the currently requested action.
     """
 
     def __init__(self, transport=None, max_rounds=4):
+        """Select the structured-call backend and model-turn limit."""
+
         self.transport = transport
         self.max_rounds = max_rounds
 
     def execute(self, action, invoke, *, request_identity=None):
+        """Inspect and execute the selected action, returning its evidence or propagating its
+        classified failure.
+        """
+
         schema = obj(
             {
                 'decision': {
@@ -121,8 +189,12 @@ class ExecutionAgent:
                 'reason': {'type': 'string'},
             }
         )
+        # observations: list of JSON values from inspections and selected-action execution.
         observations = []
+        # executed: a JSON result or None; requested_returned distinguishes a returned None from
+        # no return.
         executed = None
+        # calls: list[dict] containing structured model-call metadata.
         calls = []
         requested_started = False
         requested_returned = False
@@ -144,6 +216,8 @@ class ExecutionAgent:
                         raise ValueError(
                             'Execution agent tried to replay the requested primitive'
                         )
+                    # Mark entry before invoke(), since the selected primitive can execute
+                    # before its callback raises.
                     requested_started = True
                     executed = invoke(action)
                     requested_returned = True
@@ -220,8 +294,8 @@ class ExecutionAgent:
                 requested_started=requested_started,
             )
             if not isinstance(exc, Exception) or isinstance(exc, TokenBudgetExceeded):
-                # Preserve operator/control and budget exception identity. The
-                # environment journals this evidence before propagating it.
+                # Attach executor evidence to the original control or budget exception.
+                # The environment records that evidence before propagating the interruption.
                 exc.execution_agent_failure = failure
                 raise
             raise failure from exc

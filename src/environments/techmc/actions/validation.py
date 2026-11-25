@@ -1,8 +1,4 @@
-"""动作定义与参数校验：从元数据构造公开 schema，再校验一次动作请求。
-
-catalog 提供动作含义和执行侧，parameters 提供专用参数类型；本模块汇合为
-action_catalog 展示条目和 check_action 使用的执行前检查。
-"""
+"""Combine primitive metadata and parameter schemas, then validate actions before dispatch."""
 
 import math
 from jsonschema import Draft202012Validator
@@ -19,6 +15,8 @@ sides = _action_catalog.action_sides
 
 
 def parameter_schema(method):
+    """Return one primitive's parameter schema, checking supplemental method schemas first."""
+
     extra = _action_parameters.extra_schema(method)
     if extra is not None and method not in (
         'fake_player.equip',
@@ -218,6 +216,10 @@ def parameter_schema(method):
 
 
 def action_catalog():
+    """Build public entries for enabled server/local primitives with their schemas, effects,
+    and execution metadata.
+    """
+
     return [
         {
             'method': method,
@@ -250,9 +252,16 @@ def action_catalog():
 
 
 def check_action(action):
+    """Validate an action's shape, finite numbers, method, execution side, and
+    operation-specific parameter constraints.
+    """
+
     validate('action', action)
+    # pending: list of JSON values used as a traversal stack for nested numeric checks.
     pending = [action['params']]
     while pending:
+        # value can change between dict, list, numeric, and other scalar JSON types on
+        # successive pops.
         value = pending.pop()
         if isinstance(value, float) and not math.isfinite(value):
             raise ValueError('Action parameters must contain only finite JSON numbers')
@@ -272,11 +281,14 @@ def check_action(action):
         parameter_schema(action['method']), format_checker=Draft202012Validator.FORMAT_CHECKER
     ).validate(action['params'])
     if action['method'] in ('observe.blocks', 'observe.region'):
+        # minimum and maximum: list[int] of three block coordinates, already checked by the
+        # parameter schema.
         minimum, maximum = action['params']['min'], action['params']['max']
         volume = 1
         for low, high in zip(minimum, maximum):
             if low > high:
                 raise ValueError('Region min must not exceed max on any axis')
+            # Bounds are inclusive, so each axis contributes high - low + 1 blocks.
             volume *= high - low + 1
         if volume > 32768:
             raise ValueError(

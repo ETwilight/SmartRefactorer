@@ -1,6 +1,5 @@
-"""续跑的分段用量汇总：读取原始模型记录，核对累计费用与原有上限。
-
-同一 call_id 的重复存档合并为一次调用，冲突记录交给调用方处理。
+"""Reconcile model-call records, event ledgers, and cumulative limits across continuation
+segments.
 """
 
 import hashlib
@@ -11,19 +10,27 @@ from audit.recorder import budget_bounded
 
 
 def _integer(value):
+    """Accept nonnegative integers while excluding bool values."""
+
     return type(value) is int and value >= 0
 
 
 def _same(a, b):
+    """Compare canonical JSON text for two accounting records."""
+
     return json.dumps(a, sort_keys=True, separators=(',', ':'), allow_nan=False) == json.dumps(
         b, sort_keys=True, separators=(',', ':'), allow_nan=False
     )
 
 
 def _equivalent_limits(left, right):
-    # These optional fields have an existing missing == None meaning. Non-None
-    # values and all other keys remain exact; never silently loosen a cap.
+    """Compare limits while treating absent and None values equally for two optional fields."""
+    # Missing and None both mean no optional round-token or task-attempt cap.
+    # Compare other fields and all non-None cap values exactly.
+
     def normalized(value):
+        """Remove None-valued optional caps whose absence has the same meaning."""
+
         return {
             k: v
             for k, v in value.items()
@@ -38,6 +45,10 @@ def _equivalent_limits(left, right):
 
 
 def _segments(source, report):
+    """Yield the source and its verified ancestors, checking report hashes, identity, and
+    original limits.
+    """
+
     original_limits = report.get('limits')
     seen = set()
     while True:
@@ -55,6 +66,7 @@ def _segments(source, report):
         predecessor = (launch.get('options') or {}).get(str(method) + '_resume_from')
         if not predecessor:
             raise ValueError('Cannot locate original carried call evidence')
+        # predecessor changes from the launch file's path string to an absolute Path.
         predecessor = Path(predecessor).resolve()
         raw = (predecessor / 'report.json').read_bytes()
         previous = json.loads(raw)
@@ -71,6 +83,8 @@ def _segments(source, report):
 
 
 def _events(source):
+    """Yield decoded complete JSONL events, raising on an incomplete final record."""
+
     with (source / 'log/events.jsonl').open('rb') as stream:
         for line in stream:
             if not line.endswith(b'\n'):
@@ -79,7 +93,10 @@ def _events(source):
 
 
 def collect_resume_model_calls(source, report):
-    """Include canonical setup/maintenance calls outside any round, in real order."""
+    """Collect distinct model calls in segment event order, including setup and maintenance
+    calls.
+    """
+    # models: dict[str, dict], deduplicating model-call records by call_id.
     models = {}
     groups = [record.get('model_calls', []) for record in report.get('rounds', [])]
     groups.extend(
@@ -94,6 +111,7 @@ def collect_resume_model_calls(source, report):
                 raise ValueError('Conflicting carried model-call evidence')
             models[cid] = call
     ordered = []
+    # ordered_ids: set[str], tracking calls already placed in event order.
     ordered_ids = set()
     for segment, _ in reversed(list(_segments(Path(source).resolve(), report))):
         for event in _events(segment):
@@ -117,13 +135,22 @@ def collect_resume_model_calls(source, report):
 
 
 def validate_resume_accounting(source, report=None):
-    """核对续跑模型记录、分段汇总与原运行限制，返回可继承的累计用量。"""
+    """Return cumulative usage after reconciling the saved reports and original event
+    ledgers.
+
+    Check each call's charge and usage status, the report totals, and original
+    run and round limits. For unknown usage, verify the recorded bound against
+    its pre-completion event. Require paired model and environment events across
+    every ancestor segment before returning the carried totals.
+    """
     source = Path(source).resolve()
     report = (
         json.loads((source / 'report.json').read_text(encoding='utf-8'))
         if report is None
         else report
     )
+    # models: dict[str, dict], the carried calls checked against canonical ledger completions
+    # below.
     models = {call['call_id']: call for call in collect_resume_model_calls(source, report)}
     charged = known = unknown = 0
     unknown_ids = set()
@@ -195,6 +222,8 @@ def validate_resume_accounting(source, report=None):
         finishes = set()
         env_starts = set()
         env_finishes = set()
+        # proofs: dict[str, dict], mapping call IDs to bounds journaled while those calls were
+        # active.
         proofs = {}
         with (current / 'log/events.jsonl').open('rb') as stream:
             for line in stream:

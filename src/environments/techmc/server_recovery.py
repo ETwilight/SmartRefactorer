@@ -1,4 +1,4 @@
-"""Managed-server recovery. Never replay uncertain mutations or reset without a request."""
+"""Recover managed server instances and record world-save and recovery evidence."""
 
 from .paths import SOURCE_ROOT
 import copy
@@ -25,6 +25,8 @@ else:
 
 
 def binding(environment):
+    """Read the managed instance binding from remote state or the local server record."""
+
     remote = getattr(environment.session.server, 'remote', None)
     if remote:
         return remote.state()
@@ -37,6 +39,8 @@ def binding(environment):
 
 
 def available(port):
+    """Probe the local TCP listener for the selected bridge port."""
+
     try:
         with socket.create_connection(('127.0.0.1', port), timeout=0.3):
             return True
@@ -45,6 +49,12 @@ def available(port):
 
 
 def checkpoint(environment, label):
+    """Confirm a world save and archive the saved files under the session directory.
+
+    Return an availability or save-unconfirmed result when no matching save
+    acknowledgement is obtained. Successful results include the ZIP path and hash.
+    """
+
     remote = getattr(environment.session.server, 'remote', None)
     if remote:
         state = remote.state(fresh=True)
@@ -112,7 +122,7 @@ def checkpoint(environment, label):
     world = Path(state['world']).resolve()
     if not world.is_relative_to((ROOT / 'runtime/servers').resolve()):
         raise ValueError('World checkpoint path escaped managed runtime')
-    # Saved-file snapshot, not a VM snapshot: ticks continue and transient actors are not checkpointed.
+    # Copy saved world files after the save acknowledgement; live ticks continue.
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=1) as output:
         for path in world.rglob('*'):
             if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
@@ -129,6 +139,13 @@ def checkpoint(environment, label):
 
 
 def recover(environment, reset_world=False, reason='managed server unavailable'):
+    """Attempt managed-server recovery and persist the validated infrastructure incident.
+
+    Default recovery resumes the retained world. reset_world selects a fresh
+    instance after confirmed shutdown. Include old and new identities, readiness,
+    and any recovery or persistence error in the returned result.
+    """
+
     previous = {}
     try:
         remote = getattr(environment.session.server, 'remote', None)
@@ -175,6 +192,7 @@ def recover(environment, reset_world=False, reason='managed server unavailable')
     result.setdefault('old_world', previous.get('world'))
     result.setdefault('passed_tasks', copy.deepcopy(getattr(environment, 'task_progress', {})))
     validate('server-recovery', result)
+    # Reuse the incident list, creating a list[dict] below on the first recovery.
     events = getattr(environment, 'infrastructure_events', None)
     if events is None:
         environment.infrastructure_events = []
@@ -189,6 +207,13 @@ def recover(environment, reset_world=False, reason='managed server unavailable')
 
 
 def _recover(environment, previous, reset_world, reason):
+    """Check ownership and process state, then resume or start the selected managed instance.
+
+    Poll for readiness and the expected physical-world identity. On success, clear
+    transient session actor and clock bookkeeping; a fresh world also clears bound
+    stream instances.
+    """
+
     remote = getattr(environment.session.server, 'remote', None)
     if not previous:
         return {'status': 'unmanaged', 'recovered': False, 'reset_available': False}
@@ -202,7 +227,7 @@ def _recover(environment, previous, reset_world, reason):
             from experiment_registry import authenticate
         authenticate(previous, Path(environment.session.server.token_file).read_text().strip())
     port = previous['bridge_port']
-    # A listening SSH forward is not proof that its remote MC backend is alive.
+    # For remote instances, check process and API state alongside the local listener.
     if available(port) and (
         not remote
         or (
@@ -251,7 +276,7 @@ def _recover(environment, previous, reset_world, reason):
             '--task-selection-file',
             str(selection),
         ]
-    # Original stopped world remains in its original instance directory in every path.
+    # Resume targets the retained world; reset allocates another instance directory.
     if remote:
         arguments = [
             '--game-port',
@@ -262,7 +287,8 @@ def _recover(environment, previous, reset_world, reason):
             str(previous.get('processors', 1)),
         ]
         if reset_world:
-            # Selection is data, not a local Windows path passed to Linux.
+            # Write the selection data on the remote host and use its remote path.
+            # encoded is the task-selection dict carried in the SSH JSON payload.
             encoded = previous['task_selection']
             selection_name = (
                 'remote-recovery-selection-' + str(remote.settings['remote_port']) + '.json'
@@ -279,6 +305,7 @@ def _recover(environment, previous, reset_world, reason):
             ]
         output = remote.control(action, arguments)
         (logs / (incident_id + '.stdout.log')).write_text(output, encoding='utf-8')
+        # Remote control returns through SSH; only the local branch keeps a Popen handle.
         process = None
     else:
         with (logs / (incident_id + '.stdout.log')).open('w', encoding='utf-8') as out, (
@@ -309,6 +336,7 @@ def _recover(environment, previous, reset_world, reason):
         if process is not None and process.poll() is not None:
             break
         time.sleep(1 if remote else 0.5)
+    # same_world is bool when the new instance has an ID, otherwise None.
     same_world = (
         current.get('instance_id') == previous['instance_id']
         if current.get('instance_id')
@@ -359,12 +387,18 @@ def _recover(environment, previous, reset_world, reason):
 
 
 def after_request(environment, request, response):
+    """Inspect request feedback and attempt recovery for a confirmed managed-server crash.
+
+    Preserve terminal request certainty. Track attempted (instance_id, stopped_ns)
+    pairs and return the recovery incident or current availability information.
+    """
+
     if response.get('status') == 'error' and response.get('execution', {}).get('state') in (
         'not_started',
         'completed',
     ):
-        # A rejected request or a delivered terminal callback is not evidence of
-        # a transport outage. Recovery must not erase this execution certainty.
+        # Keep the certainty of a rejected request or delivered terminal
+        # callback and return its existing outcome.
         return None
     remote = getattr(
         getattr(getattr(environment, 'session', None), 'server', None), 'remote', None

@@ -1,7 +1,8 @@
-"""Propose：把复用计划与组件分析整理为协调的编辑方案。
+"""Turn reuse choices and dependency findings into an implementation proposal.
 
-方案声明编辑顺序、组件前置版本、调用参数、行为保持与结构检查，以及
-任务入口和库导出集合。invocation_diagnostics 检查这些描述的可执行性。
+The proposal specifies edit order, source versions, task arguments, preservation
+and structural checks, and library exports. Its invocation and check records
+are inspected before CodeGen or Rewrite starts applying edits.
 """
 
 from ..execution.bindings import validate_template, BindingError
@@ -11,7 +12,9 @@ from .check_contracts import RECORD_SCHEMA, diagnostics as check_diagnostics
 
 
 def propose(controller, public):
-    """Return a proposal against the current library and retained partial edits."""
+    """Request coordinated edits for the current plan, analyses, and partially edited
+    candidate.
+    """
     state = controller.state
     proposal = controller.operator(
         'Propose',
@@ -38,7 +41,7 @@ def propose(controller, public):
 
 
 def invocation_diagnostics(controller):
-    """Reject invalid explicit bindings before code generation, without losing edits."""
+    """Collect malformed argument bindings and check records for proposal revision."""
     state = controller.state
     diagnostics = check_diagnostics(state.proposal, controller.library.manifest['components'])
     entry = state.proposal.get('task_entry')

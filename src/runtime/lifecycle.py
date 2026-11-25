@@ -1,4 +1,4 @@
-"""Experiment ownership and episode boundaries, independent of task domain."""
+"""Keep environment-session cleanup with the runner while task attempts share the session."""
 
 EPISODE_TERMINATION_GUIDE = '''Task completion and experiment termination are separate.
 Finishing or submitting an episode ends only that task attempt. The experiment host
@@ -10,15 +10,36 @@ session; do not close it. An unevaluated final message does not establish task s
 
 
 class ManagedEnvironment:
-    """Agents use handle(); only the trusted runner uses close()."""
+    """Forward environment operations while the runner owns session cleanup.
+
+    environment is the wrapped port. Attribute access and ordinary handle() calls
+    are forwarded to it. A public session.close request receives an error response;
+    the runner closes the underlying port through this object's close() method.
+
+    Example, around a runner's task loop::
+
+        managed = managed_environment(environment)
+        feedback = managed.handle(request)
+        managed.close()
+
+    The public request uses the shared session, and the runner closes it when done.
+    """
 
     def __init__(self, environment):
+        """Keep the environment port whose session the runner owns."""
+
         self.environment = environment
 
     def __getattr__(self, name):
+        """Forward an attribute lookup to the wrapped environment."""
+
         return getattr(self.environment, name)
 
     def handle(self, request):
+        """Forward public operations and return the runner-owned-session response for
+        session.close.
+        """
+
         if request.get('op') == 'session.close':
             session = getattr(self.environment, 'session', None)
             return {
@@ -35,10 +56,14 @@ class ManagedEnvironment:
         return self.environment.handle(request)
 
     def close(self):
+        """Close the wrapped environment through the runner interface."""
+
         return self.environment.close()
 
 
 def managed_environment(environment):
+    """Return the existing managed wrapper or wrap the supplied environment."""
+
     return (
         environment
         if isinstance(environment, ManagedEnvironment)

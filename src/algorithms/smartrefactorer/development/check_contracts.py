@@ -1,9 +1,8 @@
-"""Check contracts shared by proposal admission and deterministic validation.
+"""Check the proposal's test descriptions and run Python check components.
 
-Complete invocation fixtures and ordinary Python assertions are executable.
-Narrative intent is corrected at Propose before further generation. Python
-checks receive candidate modules and fixture requests, never a live environment;
-they do not replace valid-old-input preservation evidence.
+Preservation checks can call components with recorded request feedback or run
+a Python assertion function. diagnostics reports descriptions needing revision;
+run_python_check adds an assertion function to a temporary fixture candidate.
 """
 
 from jsonschema import Draft202012Validator
@@ -77,7 +76,9 @@ RECORD_SCHEMA = {
 
 
 def diagnostics(proposal, old_components=()):
-    """Return actionable protocol errors without executing candidate code."""
+    """Inspect check schemas, Python syntax, and the expected results supplied for new
+    skills.
+    """
     issues = []
     for error in Draft202012Validator(RECORD_SCHEMA).iter_errors(proposal):
         issues.append(
@@ -115,7 +116,7 @@ def diagnostics(proposal, old_components=()):
 
 
 def run_python_check(controller, check):
-    """Run a temporary normal Python check; never publish it or infer task pass."""
+    """Execute a proposal check as a temporary component and return its fixture record."""
     source = check['source']
     name = 'srcheck' + digest(source)[:24]
     if name in controller.state.candidate:
@@ -136,6 +137,8 @@ def run_python_check(controller, check):
         },
     }
     try:
+        # invocation: dict with the check return value and the request/feedback sequence it
+        # consumed.
         invocation = controller.run_fixture(
             {**controller.state.candidate, name: component},
             name,

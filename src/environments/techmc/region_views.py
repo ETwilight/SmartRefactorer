@@ -1,7 +1,5 @@
-"""Lossless presentation partitions for region telemetry and fuel registries.
-
-Canonical region observations remain in the request ledger. These views do not
-change acquisition or evaluator inputs and never manufacture empty telemetry.
+"""Partition region telemetry into selectable sections and retrieve observed fuel-registry
+versions.
 """
 
 import copy
@@ -25,25 +23,35 @@ SECTIONS = {
 
 
 def _module(name):
+    """Import a TechMC module relative to the current package when available."""
+
     return importlib.import_module((__package__ + '.' if __package__ else '') + name)
 
 
 def content_hash(value):
+    """Hash a value's sorted, compact UTF-8 JSON representation."""
+
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(encoded.encode('utf-8')).hexdigest()
 
 
 def _fuel_values(value):
+    """Validate and copy a fuel-registry list of item-ID strings."""
+
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ValueError('Fuel registry telemetry is unavailable or malformed')
     return copy.deepcopy(value)
 
 
 def _recall(request_id, fields):
+    """Build a feedback.get request selecting dotted fields from one retained response."""
+
     return {'op': 'feedback.get', 'params': {'request_id': request_id, 'fields': fields}}
 
 
 def is_region(feedback):
+    """Recognize a completed observe.region response with a native result dictionary."""
+
     result = feedback.get('result')
     return (
         feedback.get('status') == 'completed'
@@ -55,7 +63,13 @@ def is_region(feedback):
 
 
 def present_region(feedback, sections=None):
-    """Return basic data plus explicitly selected sections and exact recall links."""
+    """Copy region feedback into its basic fields, selected sections, and exact read
+    references.
+
+    Keep available fields in the section index even when omitted from the view.
+    Replace a sampled fuel list with a content-hashed registry reference and a
+    reference to that exact list in the original observation.
+    """
     sections = ['basic'] if sections is None else list(sections)
     if not sections or len(set(sections)) != len(sections):
         raise ValueError('Region sections must be nonempty and unique')
@@ -63,14 +77,19 @@ def present_region(feedback, sections=None):
     if unknown:
         raise ValueError('Unknown region sections: ' + ', '.join(sorted(unknown)))
     result = copy.deepcopy(feedback)
+    # envelope is the copied RPC frame; its result field receives the projected region body.
     envelope = result['result']
+    # full: dict containing the original region telemetry retained by the request ledger.
     full = feedback['result']['result']
     request_id = feedback['request_id']
     partitioned = {field for fields in SECTIONS.values() for field in fields} | {
         'fuel_item_ids'
     }
     body = {key: copy.deepcopy(value) for key, value in full.items() if key not in partitioned}
+    # selected: set[str] of requested section names; sections retains their presentation order.
     selected = set(sections)
+    # section_index: dict[str, dict], recording included, omitted, or unsampled fields for each
+    # section.
     section_index = {}
     omitted = []
     for name, fields in SECTIONS.items():
@@ -114,6 +133,8 @@ def present_region(feedback, sections=None):
 
 
 def _binding(environment):
+    """Return the session ID and current server generation/world identity."""
+
     current = _module('server_recovery').binding(environment)
     return {
         'session_id': environment.session.run_id,
@@ -123,6 +144,8 @@ def _binding(environment):
 
 
 def _same_world(record, world):
+    """Check whether a registry record belongs to the supplied session and world binding."""
+
     return (
         record.get('session_id') == world['session_id']
         and record.get('server_instance_id') == world['server_instance_id']
@@ -131,6 +154,8 @@ def _same_world(record, world):
 
 
 def _registry_records(environment, world):
+    """Collect saved and region-observed fuel registries matching the current world binding."""
+
     records = []
     path = environment.session.directory / 'registries.json'
     if path.is_file():
@@ -166,6 +191,8 @@ def _registry_records(environment, world):
 
 
 def _save_record(environment, record):
+    """Persist a registry record when its session, world, and content hash are new."""
+
     path = environment.session.directory / 'registries.json'
     with getattr(environment, '_ledger_lock', nullcontext()):
         saved = (
@@ -187,10 +214,11 @@ def _save_record(environment, record):
 
 
 def registry_get(environment, params, request_id):
-    """Read an exact observed fuel registry in the current world binding.
+    """Return a fuel-registry version with its world binding and observation provenance.
 
-    A versionless request samples the server once to observe its current registry;
-    a versioned request never substitutes a new registry or crosses world bindings.
+    An explicit sha256 selects a previously observed version in the current
+    world. Without a version, sample observe.region once and publish its fuel
+    list after checking that the world binding stayed the same.
     """
     if params.get('name') != 'fuels':
         raise ValueError('Unknown registry name')
@@ -206,6 +234,7 @@ def registry_get(environment, params, request_id):
         matches = [r for r in _registry_records(environment, world) if r['sha256'] == digest]
         if not matches:
             raise ValueError('Registry version was not observed in the current world binding')
+        # record: dict for the latest retained observation of this exact content hash and world.
         record = matches[-1]
         if content_hash(_fuel_values(record['content'])) != digest:
             raise ValueError('Registry contents do not match their advertised version')
@@ -218,6 +247,8 @@ def registry_get(environment, params, request_id):
             'phase': 'diagnose',
             'params': {'dimension': 'minecraft:overworld', 'min': [0, 0, 0], 'max': [0, 0, 0]},
         }
+        # sample: native observe.region RPC envelope from the registry's dedicated observation
+        # request.
         sample = environment._primitive(action, child_id)
         if (
             not isinstance(sample, dict)

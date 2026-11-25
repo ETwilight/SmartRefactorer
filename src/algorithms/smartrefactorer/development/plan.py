@@ -1,7 +1,8 @@
-"""Plan：把任务需求映射为调用、提取或新增组件的复用选择。
+"""Choose how each task requirement will use the skill library.
 
-先按当前任务与诊断检索候选，再按需要补读具体源码，最后校验需求身份
-和引用版本，将本次有效计划交给 Analyze。
+Plan selects a call, extraction, or new component for each requirement. It can
+ask to read sources omitted by retrieval before returning its final choices.
+The accepted plan supplies the component versions used by Analyze.
 """
 
 import copy
@@ -25,7 +26,7 @@ INSTRUCTIONS = (
 
 
 def validate_plan(controller, plan):
-    """Validate stable requirement IDs and exact existing source versions."""
+    """Check requirement IDs, choice records, and the source hashes of reused skills."""
     state = controller.state
     if (
         not isinstance(plan, dict)
@@ -39,6 +40,7 @@ def validate_plan(controller, plan):
     import re
 
     ids = []
+    # requirement: str | dict; both representations are reduced to a requirement ID below.
     for requirement in plan['requirements']:
         rid = (
             requirement
@@ -62,7 +64,7 @@ def validate_plan(controller, plan):
 
 
 def plan(controller, facts):
-    """Request a reuse plan and retain the preceding valid plan on rejection."""
+    """Retrieve relevant skills, request a reuse plan, and store it after validation."""
     state = controller.state
     task = facts.get('active_task') or {}
     repair = state.repair_diagnosis or {}
@@ -76,6 +78,7 @@ def plan(controller, facts):
         'opportunity': state.refactor_opportunity,
     }
     state.retrieval = controller.retrieve(query)
+    # previous: ReusePlan | None, saved separately while the next plan is being checked.
     previous = copy.deepcopy(state.reuse_plan)
     proposed = controller.operator(
         'Plan',
@@ -88,7 +91,7 @@ def plan(controller, facts):
             'repair': state.repair_diagnosis,
         },
     )
-    # Plan 可以按组件身份补读被初次检索省略的源码，再形成最终复用选择。
+    # Read the requested component sources, then let Plan revise its draft with those records.
     for identifier in proposed.get('read_ids', []):
         state.retrieval['selected'][identifier] = state.candidate[identifier]
     if proposed.get('read_ids'):
@@ -112,7 +115,7 @@ def plan(controller, facts):
             'retained_plan_hash': digest(previous),
         }
         raise
-    # 经过版本与需求校验后，当前计划和最近有效计划一起更新。
+    # Keep a copy of the accepted plan for the next planning or repair call.
     state.reuse_plan = proposed
     state.last_valid_plan = copy.deepcopy(proposed)
     state.operator_history.append(

@@ -25,11 +25,27 @@ import java.nio.file.*;
 import java.util.*;
 import static research.agent.RpcServer.*;
 
+/**
+ * Implement the optional client-side RPC interface and tick-driven player actions.
+ *
+ * CLIENT_INTERFACES_DISABLED currently keeps initialization inactive. When enabled,
+ * RPC work is scheduled on the Minecraft client thread. One active action owns
+ * movement, breaking, interaction, or respawn state until completion or cancellation.
+ * Observation methods read client caches, screens, inventory, and debug entries;
+ * schematic and selected mod operations delegate to ModAdapter.
+ *
+ * <pre>{@code
+ * ClientBridge bridge = new ClientBridge();
+ * bridge.onInitializeClient();
+ * }</pre>
+ * Fabric calls this entrypoint at client startup; the current flag leaves it inactive.
+ */
 public class ClientBridge implements ClientModInitializer {
     private static final boolean CLIENT_INTERFACES_DISABLED = true;
     private Minecraft mc;
     private RpcServer rpc;
     private final Map<String, JsonObject> actions = new LinkedHashMap<>();
+    // active and owner are nullable IDs for the one action currently driven by client ticks.
     private String active, owner;
     private long deadline;
     private Vec3 destination;
@@ -40,6 +56,7 @@ public class ClientBridge implements ClientModInitializer {
     private InteractionHand interactionHand;
     private int interactionDelay;
     private boolean respawning;
+    /** Start RPC and register tick and shutdown hooks when client interfaces are enabled. */
     public void onInitializeClient() {
         if (CLIENT_INTERFACES_DISABLED) return;
         mc = Minecraft.getInstance();
@@ -48,11 +65,13 @@ public class ClientBridge implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> tick());
         ClientLifecycleEvents.CLIENT_STOPPING.register(client -> { cancel("shutdown"); rpc.close(); });
     }
+    /** Check world availability, requested dimension, and local actor identity. */
     private void requireWorld(JsonObject request, JsonObject p) {
         if (mc.player == null || mc.level == null || mc.gameMode == null) throw new IllegalStateException("Client not in world");
         if (p.has("dimension") && !str(p,"dimension").equals(mc.level.dimension().identifier().toString())) throw new IllegalArgumentException("Dimension mismatch");
         if (!str(request,"actor_id").equals(mc.player.getPlainTextName()) && !str(request,"actor_id").equals(mc.player.getUUID().toString())) throw new IllegalArgumentException("actor_id must match local player name or UUID");
     }
+    /** Route a client observation, player action, GUI, debug, or mod request. */
     private JsonElement dispatch(JsonObject request) {
         String method = str(request,"method"); JsonObject p = params(request);
         if (method.equals("session.describe")) {
@@ -121,7 +140,7 @@ public class ClientBridge implements ClientModInitializer {
                 start(request,p);respawning=true;
                 JsonObject action=actions.get(active);action.addProperty("kind","respawn");
                 action.addProperty("respawn_requested",true);action.addProperty("initial_health",mc.player.getHealth());
-                // Same vanilla path as DeathScreen: one packet, then wait for the server's new live player.
+                // Submit the vanilla respawn request and wait for the live player state on later ticks.
                 mc.player.respawn();mc.setScreen(null);
                 yield action.deepCopy();
             }
@@ -158,6 +177,7 @@ public class ClientBridge implements ClientModInitializer {
             }
         };
     }
+    /** Allocate action identity, owner, timeout, and its initial running record. */
     private void start(JsonObject request, JsonObject p) {
         if(active!=null) throw new IllegalStateException("Actor already has active action");
         int timeout=p.has("timeout_ms") ? integer(p,"timeout_ms") : 15000;
@@ -165,13 +185,15 @@ public class ClientBridge implements ClientModInitializer {
         active=UUID.randomUUID().toString(); owner=str(request,"run_id"); deadline=System.nanoTime()+timeout*1000000L;
         JsonObject action=new JsonObject();action.addProperty("action_id",active);action.addProperty("status","running");action.addProperty("run_id",owner);actions.put(active,action);
     }
+    /** Advance the active action and retain an error before cancelling on failure. */
     private void tick() {
         try{tickActive();}catch(Exception error){if(active!=null)actions.get(active).addProperty("error",error.toString());cancel("failed");}
     }
+    /** Advance respawn, movement, block breaking, or delayed interaction state. */
     private void tickActive() {
         if(active==null)return;
         if(respawning){
-            // A death/loading screen is expected during this action; it must not trigger ordinary GUI cancellation.
+            // Respawn can retain a death or loading screen while the new player state arrives.
             JsonObject action=actions.get(active);
             if(mc.player!=null&&mc.level!=null&&!mc.player.isDeadOrDying()&&mc.player.getHealth()>0){
                 action.addProperty("health",mc.player.getHealth());action.addProperty("alive",true);
@@ -199,22 +221,28 @@ public class ClientBridge implements ClientModInitializer {
             mc.gameMode.continueDestroyBlock(breaking,breakingFace);mc.player.swing(InteractionHand.MAIN_HAND);
         }
         if(interacting!=null&&--interactionDelay<=0){
-            // Allow at least one normal movement packet to publish the new view
-            // before a directional placement is handled by the server.
+            // Give the normal movement packet time to publish the new view
+            // before submitting directional placement to the server.
             var result=mc.gameMode.useItemOn(mc.player,interactionHand,interacting);
             actions.get(active).addProperty("interaction",result.toString());actions.get(active).addProperty("world_confirmation","observe.blocks required");cancel("completed");
         }
     }
+    /** Release held inputs and clear active state after recording the final action status. */
     private void cancel(String status) {
         mc.options.keyUp.setDown(false);mc.options.keyJump.setDown(false);mc.options.keyAttack.setDown(false);mc.options.keyUse.setDown(false);
         if(mc.gameMode!=null) mc.gameMode.stopDestroyBlock();
         if(active!=null) {actions.get(active).addProperty("status",status);actions.get(active).addProperty("finished_wall_ms",System.currentTimeMillis());}
         active=null;owner=null;destination=null;breaking=null;interacting=null;respawning=false;waypoints.clear();
     }
+    /** Decode three finite JSON coordinates as a vector. */
     static Vec3 vector(JsonArray a) {double x=a.get(0).getAsDouble(),y=a.get(1).getAsDouble(),z=a.get(2).getAsDouble();if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(z))throw new IllegalArgumentException("Nonfinite coordinates");return new Vec3(x,y,z);}
+    /** Read the requested block face, defaulting to up. */
     private Direction face(JsonObject p) {return Direction.valueOf(p.has("face") ? str(p,"face").toUpperCase(Locale.ROOT) : "UP");}
+    /** Check that a target block is loaded and within the client interaction radius. */
     private void reach(BlockPos p) {if(!mc.level.hasChunkAt(p)||mc.player.getEyePosition().distanceTo(Vec3.atCenterOf(p))>6) throw new IllegalArgumentException("Target unloaded or out of reach");}
+    /** Aim yaw and pitch from the player eye position toward the target vector. */
     private void look(Vec3 at) {Vec3 d=at.subtract(mc.player.getEyePosition());mc.player.setYRot((float)Math.toDegrees(Math.atan2(-d.x,d.z)));mc.player.setXRot((float)-Math.toDegrees(Math.atan2(d.y,Math.sqrt(d.x*d.x+d.z*d.z))));}
+    /** Read client player, inventory, world, target, and screen state. */
     private JsonElement snapshot() {
         Map<String,Object> data=new LinkedHashMap<>();
         data.put("position",List.of(mc.player.getX(),mc.player.getY(),mc.player.getZ()));data.put("yaw",mc.player.getYRot());data.put("pitch",mc.player.getXRot());
@@ -227,14 +255,17 @@ public class ClientBridge implements ClientModInitializer {
         data.put("inventory",java.util.stream.IntStream.range(0,mc.player.getInventory().getContainerSize()).mapToObj(i->Map.of("slot",i,"item",item(mc.player.getInventory().getItem(i)))).toList());
         return json(data);
     }
+    /** Report block, chunk, section, and local coordinates from client state. */
     private JsonElement chunkInfo(BlockPos pos) {
         int x=pos.getX(),y=pos.getY(),z=pos.getZ();int cx=Math.floorDiv(x,16),cy=Math.floorDiv(y,16),cz=Math.floorDiv(z,16);
         return json(Map.of("block",List.of(x,y,z),"chunk",List.of(cx,cz),"section",List.of(cx,cy,cz),"local",List.of(Math.floorMod(x,16),Math.floorMod(y,16),Math.floorMod(z,16)),"bounds",List.of(cx*16,cz*16,cx*16+15,cz*16+15),"client_loaded",mc.level.hasChunkAt(pos),"server_ticking","unavailable","source","client","client_tick",mc.player.tickCount));
     }
+    /** Read or update one client debug overlay setting. */
     private JsonElement overlay(String method,JsonObject p,Identifier id) {
         if(method.endsWith("set")) {mc.debugEntries.setStatus(id,p.get("enabled").getAsBoolean()?DebugScreenEntryStatus.ALWAYS_ON:DebugScreenEntryStatus.NEVER);mc.debugEntries.save();}
         return json(Map.of("enabled",mc.debugEntries.isCurrentlyEnabled(id),"configuration",mc.debugEntries.getStatus(id).toString(),"source","client"));
     }
+    /** Collect allowed debug-entry text and current display settings. */
     private JsonElement entries(JsonObject p) {
         Map<String,Object> out=new TreeMap<>();
         var pos=mc.player.blockPosition();var chunk=mc.level.hasChunkAt(pos)?mc.level.getChunkAt(pos):null;
@@ -252,6 +283,7 @@ public class ClientBridge implements ClientModInitializer {
         }
         return json(out);
     }
+    /** Encode item components, durability, tags, and tooltip text from the client registry. */
     private JsonElement item(ItemStack stack) {
         var ops=RegistryOps.create(JsonOps.INSTANCE,mc.level.registryAccess());JsonObject components=new JsonObject();
         for(var component:stack.getComponents()){
@@ -264,6 +296,7 @@ public class ClientBridge implements ClientModInitializer {
         info.put("tags",stack.typeHolder().tags().map(t->t.location().toString()).toList());
         info.put("normal_tooltip",stack.getTooltipLines(Item.TooltipContext.of(mc.level),mc.player,TooltipFlag.NORMAL).stream().map(c->c.getString()).toList());info.put("advanced_tooltip",stack.getTooltipLines(Item.TooltipContext.of(mc.level),mc.player,TooltipFlag.ADVANCED).stream().map(c->c.getString()).toList());info.put("server_unsynced_data","unavailable");info.put("source","client");return json(info);
     }
+    /** Report the current camera raycast hit and its client-visible target data. */
     private JsonElement target() {
         var camera=mc.getCameraEntity();var hit=camera==null?mc.hitResult:mc.player.raycastHitResult(1.0f,camera);if(hit==null)return json(Map.of("type","unavailable"));
         Map<String,Object> data=new LinkedHashMap<>();data.put("type",hit.getType().toString());data.put("hit",List.of(hit.getLocation().x,hit.getLocation().y,hit.getLocation().z));
@@ -271,11 +304,14 @@ public class ClientBridge implements ClientModInitializer {
         if(hit instanceof EntityHitResult e)data.put("entity",e.getEntity().getUUID().toString());
         data.put("source","client");return json(data);
     }
+    /** Read client FPS, frame time, and JVM memory counters. */
     private JsonElement performance() {Runtime r=Runtime.getRuntime();return json(Map.of("fps",mc.getFps(),"frame_time_ns",mc.getFrameTimeNs(),"jvm_used_bytes",r.totalMemory()-r.freeMemory(),"jvm_max_bytes",r.maxMemory(),"server_tps","unavailable: use server bridge","source","client"));}
+    /** Schedule a screenshot and return its intended file path and sample metadata. */
     private JsonElement capture() {
         String name="agent-"+UUID.randomUUID()+".png";Screenshot.grab(mc.gameDirectory,name,mc.getMainRenderTarget(),1,c->{});
         return json(Map.of("file",mc.gameDirectory.toPath().resolve("screenshots").resolve(name).toAbsolutePath().toString(),"status","capture_scheduled","client_tick",mc.player==null?-1:mc.player.tickCount,"sample_wall_ms",System.currentTimeMillis()));
     }
+    /** Read loaded client block states within a bounded inclusive region. */
     private JsonElement blocks(JsonObject p) {
         BlockPos min=BlockPos.containing(vector(p.getAsJsonArray("min"))),max=BlockPos.containing(vector(p.getAsJsonArray("max")));
         long volume=(long)(max.getX()-min.getX()+1)*(max.getY()-min.getY()+1)*(max.getZ()-min.getZ()+1);
@@ -283,23 +319,27 @@ public class ClientBridge implements ClientModInitializer {
         List<Object> out=new ArrayList<>();for(BlockPos pos:BlockPos.betweenClosed(min,max)){boolean loaded=mc.level.hasChunkAt(pos);out.add(Map.of("position",List.of(pos.getX(),pos.getY(),pos.getZ()),"loaded",loaded,"state",loaded?mc.level.getBlockState(pos).toString():"unavailable"));}
         return json(Map.of("blocks",out,"source","client","client_tick",mc.player.tickCount));
     }
+    /** Read client entities in the requested player-relative search box. */
     private JsonElement entities(JsonObject p) {
         double radius=p.has("radius")?p.get("radius").getAsDouble():16;if(radius<0||radius>128)throw new IllegalArgumentException("Invalid radius");
         return json(mc.level.getEntities(mc.player,mc.player.getBoundingBox().inflate(radius)).stream().map(e->Map.of("uuid",e.getUUID().toString(),"type",BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString(),"position",List.of(e.getX(),e.getY(),e.getZ()),"bbox",List.of(e.getBoundingBox().minX,e.getBoundingBox().minY,e.getBoundingBox().minZ,e.getBoundingBox().maxX,e.getBoundingBox().maxY,e.getBoundingBox().maxZ),"eye_height",e.getEyeHeight(),"source","client")).toList());
     }
+    /** Submit container clicks that move the requested item count between slots. */
     private JsonElement transfer(JsonObject p) {
         int container=integer(p,"container_id");if(mc.player.containerMenu.containerId!=container)throw new IllegalStateException("Container changed");
         int from=integer(p,"from"),to=integer(p,"to"),count=integer(p,"count");var menu=mc.player.containerMenu;
         if(from<0||to<0||from>=menu.slots.size()||to>=menu.slots.size()||from==to||count<1||count>64||!menu.getCarried().isEmpty()||menu.getSlot(from).getItem().getCount()<count)throw new IllegalArgumentException("Invalid transfer or cursor not empty");
         mc.gameMode.handleContainerInput(container,from,0,ContainerInput.PICKUP,mc.player);
+        // Pick up the source stack, right-click individual items into the target, then return the remainder.
         for(int i=0;i<count;i++)mc.gameMode.handleContainerInput(container,to,1,ContainerInput.PICKUP,mc.player);
         mc.gameMode.handleContainerInput(container,from,0,ContainerInput.PICKUP,mc.player);
         return json(Map.of("status","submitted","confirmation","observe.player required"));
     }
+    /** Apply a bounded click, scroll, text, or close operation to the named current screen. */
     private JsonElement gui(JsonObject p) {
         if(mc.screen==null||!mc.screen.getClass().getName().equals(str(p,"screen")))throw new IllegalStateException("GUI mismatch");
         if(str(p,"operation").equals("close")){mc.player.closeContainer();return json(Map.of("closed",true));}
-        // Never use a GUI fallback as an alternate command or scripting channel.
+        // Expose container and MaLiLib screens through the GUI operation path.
         if(!(mc.screen instanceof net.minecraft.client.gui.screens.inventory.AbstractContainerScreen) && !mc.screen.getClass().getName().startsWith("fi.dy.masa."))throw new SecurityException("Only container and MaLiLib mod GUIs are exposed");
         boolean handled=false;
         switch(str(p,"operation")) {

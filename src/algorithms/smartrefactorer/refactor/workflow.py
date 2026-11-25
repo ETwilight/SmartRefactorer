@@ -1,7 +1,8 @@
-"""维护重构：Detect → 复用 Develop/repair → 行为与结构检查 → 发布。
+"""Develop and publish a maintenance change to the committed skill library.
 
-维护以当前正式库为父版本，并保存先前的任务开发状态；机会处理完成后
-记录库版本并将控制权交回宿主。
+The accepted task state is archived before a maintenance candidate is created.
+Its goal passes through the same planning, editing, validation, and repair stages.
+Publication requires both behavior-preservation and structural checks.
 """
 
 import copy
@@ -11,7 +12,7 @@ from .detect import detect
 
 
 def maintain(controller):
-    """Advance an optional structural opportunity using existing development stages."""
+    """Advance maintenance and return True when its review or publication is complete."""
     state = controller.state
     if not state.is_maintenance:
         delta = state.publication_delta
@@ -24,7 +25,8 @@ def maintain(controller):
             return True
         if controller.archive_accepted_state is not None:
             state.task_development_archive = controller.archive_accepted_state()
-        # 维护从当前正式库创建候选，先前任务的开发状态已单独归档。
+        # Start the maintenance candidate from the committed library after archiving task
+        # development.
         state.candidate = copy.deepcopy(controller.library.manifest['components'])
         state.is_maintenance = True
         state.base_library_hash = digest(controller.library.manifest)
@@ -34,7 +36,7 @@ def maintain(controller):
         state.validation_evidence = []
         controller.transition(Phase.IDLE)
         controller.save()
-    # 维护目标复用同一套 Plan、Develop 与 repair 阶段。
+    # Use the detected structural goal as the input to the existing development stages.
     outcome = controller.advance({'goal': state.refactor_opportunity['goal']})
     if not outcome.ready_to_execute:
         return False
@@ -53,7 +55,7 @@ def maintain(controller):
         controller.transition(Phase.REPAIR)
         controller.save()
         return False
-    # 行为保持和结构目标均有检查证据后，维护候选进入库事务。
+    # Publish the maintenance candidate after both check groups have passed.
     controller.library.commit(
         state.base_library_hash, state.candidate, state.validation_evidence, state.proposal
     )

@@ -12,12 +12,26 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.*;
 
-/** Loopback only, authenticated, durable request IDs. Timed out requests are never blindly replayed. */
+/**
+ * Serve authenticated bridge RPC and retain request outcomes in a JSONL journal.
+ *
+ * Two HTTP workers receive requests. queue schedules game access on the owning game
+ * thread; handler executes the request there. A key combines run, actor, and request
+ * IDs. The request fingerprint distinguishes reuse with a different payload.
+ * Pending state is persisted before dispatch, and completed outcomes replace its
+ * in-memory journal offset. Repeated requests read the retained outcome.
+ *
+ * <pre>{@code
+ * RpcServer rpc = new RpcServer(port, "server", queue, handler);
+ * rpc.close();
+ * }</pre>
+ * The supplied queue and handler connect HTTP requests to the server-thread bridge.
+ */
 public final class RpcServer implements AutoCloseable {
     public static final Gson JSON = new GsonBuilder().serializeNulls().create();
     private final HttpServer server;
     private final ExecutorService workers = Executors.newFixedThreadPool(2);
-    // Only offsets stay resident. Region/NBT responses remain in the durable journal.
+    // The index retains byte offsets; large region and NBT responses stay in the journal.
     private final Map<String, Long> ledger = new HashMap<>();
     private final Path journal;
     private final byte[] token;
@@ -25,6 +39,7 @@ public final class RpcServer implements AutoCloseable {
     private final Function<JsonObject, JsonElement> handler;
     private final String side;
 
+    /** Open the journal, recover complete record offsets, and start the loopback HTTP listener. */
     public RpcServer(int port, String side, Consumer<Runnable> queue, Function<JsonObject, JsonElement> handler) throws Exception {
         this.side = side; this.queue = queue; this.handler = handler;
         Path root = Path.of(System.getProperty("minecraft.agent.root", ".." )).toAbsolutePath().normalize();
@@ -47,7 +62,7 @@ public final class RpcServer implements AutoCloseable {
                 long size=Files.size(journal);
                 while((line=reader.readLine())!=null) {
                     long next=offset+line.getBytes(StandardCharsets.UTF_8).length+1;
-                    if(next>size)break; // Never replay a torn final record.
+                    if(next>size)break; // The final incomplete record ends beyond the captured file size.
                     if(!line.isBlank())ledger.put(JsonParser.parseString(line).getAsJsonObject().get("key").getAsString(),offset);
                     complete=next;offset=next;
                 }
@@ -62,6 +77,7 @@ public final class RpcServer implements AutoCloseable {
         server.setExecutor(workers);
         server.start();
     }
+    /** Append and force a journal record before updating its in-memory offset. */
     private synchronized void persist(String key, JsonObject record) throws Exception {
         record.addProperty("key", key);
         long offset;
@@ -73,15 +89,18 @@ public final class RpcServer implements AutoCloseable {
         }
         ledger.put(key, offset);
     }
+    /** Read the latest journal record for a key or return null when absent. */
     private JsonObject previous(String key) throws Exception {
         Long offset=ledger.get(key);
         if(offset==null)return null;
         try(var file=new java.io.RandomAccessFile(journal.toFile(),"r")) {
             file.seek(offset);
             String line=file.readLine();
+            // RandomAccessFile.readLine maps raw bytes to Latin-1 characters; decode those bytes as UTF-8.
             return JsonParser.parseString(new String(line.getBytes(StandardCharsets.ISO_8859_1),StandardCharsets.UTF_8)).getAsJsonObject();
         }
     }
+    /** Authenticate and deduplicate a request, dispatch it, and return its current outcome. */
     private void receive(HttpExchange exchange) {
         JsonObject response;
         int status = 200;
@@ -111,6 +130,7 @@ public final class RpcServer implements AutoCloseable {
                 pending.addProperty("status", "pending_or_unknown");
                 persist(key, pending);
             }
+            // The future connects the HTTP worker to the scheduled game-thread result.
             CompletableFuture<JsonObject> future = new CompletableFuture<>();
             queue.accept(() -> {
                 JsonObject result = envelope(request);
@@ -124,12 +144,14 @@ public final class RpcServer implements AutoCloseable {
                 future.complete(result);
             });
             try { response = future.get(10, TimeUnit.SECONDS); }
+            // An HTTP wait timeout leaves the scheduled request and its pending journal entry intact.
             catch (TimeoutException e) { response = envelope(request); response.addProperty("status", "pending_or_unknown"); }
         } catch (Throwable error) {
             response = new JsonObject(); response.addProperty("status", "error"); response.addProperty("error", error.toString());
         }
         try { send(exchange, status, response); } catch (Exception ignored) { exchange.close(); }
     }
+    /** Copy request identity into an outcome envelope with side and wall-clock metadata. */
     private JsonObject envelope(JsonObject request) {
         JsonObject result = new JsonObject();
         for (String field : List.of("run_id", "actor_id", "request_id", "method")) result.add(field, request.get(field));
@@ -137,15 +159,21 @@ public final class RpcServer implements AutoCloseable {
         result.addProperty("sample_wall_ms", System.currentTimeMillis());
         return result;
     }
+    /** Serialize one JSON response and close its HTTP response stream. */
     private static void send(HttpExchange exchange, int status, JsonObject response) throws Exception {
         byte[] bytes = JSON.toJson(response).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         exchange.sendResponseHeaders(status, bytes.length);
         try (var stream = exchange.getResponseBody()) { stream.write(bytes); }
     }
+    /** Stop the listener and interrupt its HTTP worker pool. */
     public void close() { server.stop(0); workers.shutdownNow(); }
+    /** Read request parameters or supply an empty JSON object. */
     public static JsonObject params(JsonObject request) { return request.has("params") ? request.getAsJsonObject("params") : new JsonObject(); }
+    /** Read a required JSON string field. */
     public static String str(JsonObject p, String key) { return p.get(key).getAsString(); }
+    /** Read a required JSON integer field. */
     public static int integer(JsonObject p, String key) { return p.get(key).getAsInt(); }
+    /** Encode a Java value as a Gson JSON tree. */
     public static JsonElement json(Object obj) { return JSON.toJsonTree(obj); }
 }

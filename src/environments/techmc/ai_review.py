@@ -1,4 +1,6 @@
-"""Optional independent rubric review; numeric acceptance stays deterministic."""
+"""Review measured machine evidence with rubric checks and native-geometry citation
+requirements.
+"""
 
 import json
 
@@ -41,6 +43,8 @@ STRUCTURAL_RULES = {
 
 
 def compact_region(value):
+    """Select region summaries used by the evidence reviewer."""
+
     return {
         k: value[k]
         for k in (
@@ -57,6 +61,8 @@ def compact_region(value):
 
 
 def compact_storage(value):
+    """Project container snapshots into identity, loading, size, type, and location metadata."""
+
     return {
         'tick': value.get('tick'),
         'containers': [
@@ -74,13 +80,47 @@ def compact_storage(value):
 
 
 class AIReviewer:
+    """Produce rubric verdicts from task requirements and recorded acceptance evidence.
+
+    transport is an optional backend passed to the shared structured model call.
+    review() uses local observation views and a per-call geometry cache. Native
+    block states are grouped into inclusive index ranges with x varying fastest,
+    then y, then z; identical geometry refers to its earlier observation ID.
+    geometry_ids tracks loaded server-geometry readbacks and geometry_trials
+    retains their optional trial IDs.
+
+    The returned checks must cover the rubric exactly once and cite known
+    evidence IDs. Passing required structural checks cite loaded geometry;
+    when geometry spans multiple trials, they cite at least two trial IDs.
+    The result includes a combined verdict, descriptive rubric pass fraction,
+    and model-request metadata for the recorded call.
+
+    Example:
+        reviewer = AIReviewer()
+        review = reviewer.review(task, submission, evidence, deterministic_report)
+
+    review adds structural/rubric evidence to the measured acceptance report.
+    The evaluator combines these check verdicts with its deterministic results.
+    """
+
     def __init__(self, transport=None):
+        """Select the optional structured-call backend."""
+
         self.transport = transport
 
     def review(self, task, submission, evidence, deterministic_report):
+        """Project evidence, request rubric checks, validate their coverage and citations,
+        and return the review result.
+        """
+
         observations = []
+        # geometry_ids: set[str] of observation IDs eligible for native-geometry citations.
         geometry_ids = set()
+        # geometry_trials: dict[str, str | None], mapping geometry observation IDs to their
+        # trial labels.
         geometry_trials = {}
+        # geometry_cache: dict[str, str], mapping canonical geometry JSON to its first
+        # observation ID.
         geometry_cache = {}
         required = required_review(task)
         rubric = list(dict.fromkeys(RUBRIC + required))
@@ -123,6 +163,8 @@ class AIReviewer:
                 'params', {}
             ).get('min') != observation.get('params', {}).get('max'):
                 blocks = value.get('blocks', [])
+                # palette: dict[str, list[int]], grouping linear block indices by native
+                # block-state string.
                 palette = {}
                 bounds = {k: observation['params'][k] for k in ('min', 'max')}
                 origin = bounds['min']
@@ -144,10 +186,13 @@ class AIReviewer:
                         pos = block.get('position')
                         if pos is None:
                             continue
+                        # Flatten offsets with x varying fastest: x + size_x * (y + size_y * z).
                         index = (pos[0] - origin[0]) + size[0] * (
                             (pos[1] - origin[1]) + size[1] * (pos[2] - origin[2])
                         )
                         palette.setdefault(block.get('state', 'unavailable'), []).append(index)
+                # runs: dict[str, list[list[int]]], storing inclusive [first, last] index ranges
+                # for each state.
                 runs = {}
                 for state, indices in palette.items():
                     ranges = []

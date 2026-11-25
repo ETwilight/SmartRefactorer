@@ -1,4 +1,4 @@
-"""JSONL CLI for the exact same Environment.handle used by Python controllers."""
+"""Serve TechMC protocol requests as JSON lines or dispatch one validated bridge primitive."""
 
 from pathlib import Path as _BootstrapPath
 import sys as _BootstrapSys
@@ -14,6 +14,10 @@ from urllib.parse import urlsplit
 
 
 def primitive():
+    """Read one primitive request from stdin, validate its action, call the bridge, and print
+    JSON feedback.
+    """
+
     if __package__:
         from .adapters.bridge import Bridge, BridgeError
         from .environment import check_action
@@ -52,6 +56,10 @@ def primitive():
 
 
 def main():
+    """Read protocol requests from a file or stdin, dispatch them through Environment.handle,
+    and close the session.
+    """
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--actor', default='ETwilight')
     parser.add_argument('--run-id')
@@ -89,6 +97,8 @@ def main():
 
             requests = [Path(args.request_file).read_text(encoding='utf-8')]
         else:
+            # requests: the stdin text stream in this mode; request-file mode supplies a
+            # list[str].
             requests = sys.stdin
         for line in requests:
             try:

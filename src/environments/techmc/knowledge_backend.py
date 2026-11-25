@@ -1,4 +1,4 @@
-"""Local knowledge runs in the environment interpreter, independent of a method's venv."""
+"""Execute Wiki and source queries in the project's TechMC dependency environment."""
 
 import builtins
 import json
@@ -7,7 +7,8 @@ from pathlib import Path
 import sqlite3
 import subprocess
 
-ROOT = Path(__file__).resolve().parents[2] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
+
 METHODS = frozenset(
     (
         'wiki.search',
@@ -21,6 +22,8 @@ METHODS = frozenset(
 
 
 def interpreter():
+    """Return the installed project-local TechMC Python interpreter."""
+
     executable = (
         Path(__file__).resolve().parents[2]
         / '.venvs/techmc'
@@ -34,6 +37,10 @@ def interpreter():
 
 
 def _run(payload=None, *, check=False):
+    """Run the knowledge worker, decode its result, and reconstruct a returned builtin or
+    SQLite exception when it fails.
+    """
+
     command = [
         str(interpreter()),
         '-B',
@@ -56,12 +63,14 @@ def _run(payload=None, *, check=False):
     if process.returncode:
         raise RuntimeError('Environment knowledge worker failed: ' + process.stderr[-2000:])
     try:
+        # process.stdout is str; reply is the decoded worker result/error envelope.
         reply = json.loads(process.stdout)
     except ValueError as exc:
         raise RuntimeError('Malformed environment knowledge worker response') from exc
     if reply.get('ok') is not True:
         error = reply.get('error', {})
         name = error.get('type', 'RuntimeError')
+        # exception: object | None until the following check selects an Exception subclass.
         exception = getattr(builtins, name, None) or getattr(sqlite3, name, None)
         if not isinstance(exception, type) or not issubclass(exception, Exception):
             exception = RuntimeError
@@ -70,11 +79,13 @@ def _run(payload=None, *, check=False):
 
 
 def preflight():
-    """Check the shared corpus/dependencies before any model or game allocation."""
+    """Run the knowledge worker's dependency and corpus checks."""
     return _run(check=True)
 
 
 def query(method, params):
+    """Execute one supported knowledge method through the environment interpreter."""
+
     if method not in METHODS:
         raise ValueError('Unknown read-only knowledge method: ' + str(method))
     return _run({'method': method, 'params': params})

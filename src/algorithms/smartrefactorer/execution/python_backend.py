@@ -1,4 +1,4 @@
-"""Normal Python source and explicit callable interfaces; no game rules or bot."""
+"""Parse skill source, load candidate modules, bind calls, and run recorded fixtures."""
 
 import ast
 import asyncio
@@ -14,13 +14,15 @@ PROFILE = 'python-v1'
 
 
 def parse(source):
+    """Parse and compile source to check its syntax, returning the AST."""
+
     tree = ast.parse(source)
     compile(tree, '<skill>', 'exec')
     return tree
 
 
 def references(source, component_id=None):
-    """Static import dependencies, not an assertion that all calls are static."""
+    """Find imported skill IDs and call sites, and flag unresolved dynamic imports."""
     tree = parse(source)
     dependencies = set()
     dynamic = False
@@ -80,6 +82,8 @@ def references(source, component_id=None):
             dynamic = True
 
     def dotted(node):
+        """Join a name or attribute chain into its dotted Python spelling."""
+
         if isinstance(node, ast.Name):
             return node.id
         if isinstance(node, ast.Attribute):
@@ -100,6 +104,8 @@ def references(source, component_id=None):
 
 
 def bind(function, arguments, interface, capabilities):
+    """Bind declared inputs and supplied host callbacks to the function signature."""
+
     style = interface.get('call_style', 'kwargs')
     if style == 'kwargs':
         positional = []
@@ -113,6 +119,7 @@ def bind(function, arguments, interface, capabilities):
     else:
         raise ValueError('Unknown call_style: ' + str(style))
     signature = inspect.signature(function)
+    # bound: inspect.BoundArguments, later completed with host callbacks and default arguments.
     bound = signature.bind_partial(*positional, **keywords)
     for parameter, capability in interface.get('host_bindings', {}).items():
         if parameter in bound.arguments:
@@ -128,20 +135,39 @@ def bind(function, arguments, interface, capabilities):
 
 
 class SkillModules(importlib.abc.MetaPathFinder):
-    """Let Python itself load ordinary modules and resolve their imports."""
+    """Load candidate components as modules under the skills package.
+
+    components maps component IDs to source records. directory holds one generated
+    Python file per component; files maps each qualified module name to that Path.
+    Entering the context saves existing skills modules and installs this finder.
+    Exiting removes the candidate modules and restores the saved module objects.
+
+    Example, after preparing a candidate::
+
+        with SkillModules(components, directory) as modules:
+            function = modules.entry(component_id, components[component_id]['interface'])
+
+    function is the declared callable from this candidate's module set. Calls and
+    imports during the context use the same candidate versions.
+    """
 
     def __init__(self, components, directory):
+        """Keep the candidate sources and the directory used for generated modules."""
+
         self.components = components
         self.directory = Path(directory)
         self.files = {}
 
     def __enter__(self):
+        """Write the source files and install the candidate module finder."""
+
         self.directory.mkdir(parents=True, exist_ok=True)
         for name, component in self.components.items():
             path = self.directory / (digest(name) + '.py')
             path.write_text(component['source'], encoding='utf-8')
             self.files['skills.' + name] = path
-        # 保存当前进程中的 skills 模块，当前候选使用独立的加载上下文。
+        # Save the process module objects before loading this candidate under the same skills
+        # names.
         self.previous = {
             name: module
             for name, module in sys.modules.items()
@@ -153,6 +179,8 @@ class SkillModules(importlib.abc.MetaPathFinder):
         return self
 
     def find_spec(self, fullname, path=None, target=None):
+        """Return a module or package specification for a candidate skill name."""
+
         if fullname == 'skills':
             spec = importlib.util.spec_from_loader(fullname, loader=None, is_package=True)
             spec.submodule_search_locations = []
@@ -168,44 +196,89 @@ class SkillModules(importlib.abc.MetaPathFinder):
         return None
 
     def entry(self, component_id, interface):
+        """Import a component and resolve the callable named by its interface."""
+        # function: ModuleType initially; entrypoint resolution below changes it to
+        # Callable[..., Any].
+
         function = importlib.import_module('skills.' + component_id)
         entrypoint = interface.get('entrypoint')
         if not isinstance(entrypoint, str) or not entrypoint:
             raise ValueError('Python interface requires its actual entrypoint')
         for name in entrypoint.split('.'):
+            # Each attribute can be a namespace or class; the last one must be the declared
+            # callable.
             function = getattr(function, name)
         if not callable(function):
             raise ValueError('Declared entrypoint is not callable')
         return function
 
     def __exit__(self, *exc):
+        """Remove the candidate import finder and restore the previous skills modules."""
+
         if self in sys.meta_path:
             sys.meta_path.remove(self)
         for name in list(sys.modules):
             if name == 'skills' or name.startswith('skills.'):
                 sys.modules.pop(name)
-        # 恢复进入执行前的模块集合，下一次候选会重新加载自己的源码。
+        # Restore the saved modules after the candidate has finished executing.
         sys.modules.update(self.previous)
 
 
 class FixtureEvidenceMissing(ValueError):
+    """A fixture call reached a request with no recorded feedback.
+
+    fixture() raises this when its request cursor passes the supplied receipts.
+    Validation records the missing interaction as an unfinished check.
+
+    Example::
+
+        try:
+            result = fixture(components, component_id, arguments, receipts)
+        except FixtureEvidenceMissing as error:
+            diagnostic = str(error)
+
+    diagnostic identifies the request whose feedback is still needed.
+    """
+
     pass
 
 
 class FixtureExecutionError(ValueError):
+    """An exception from the component run during a fixture check.
+
+    details is the exception dictionary produced by the executor. Its type and
+    message also form this exception's message, while details retains the traceback
+    and original argument record for validation diagnostics.
+
+    Example::
+
+        error = FixtureExecutionError(details)
+        observed = error.details
+
+    observed is the execution record that the validator can attach to its check.
+    """
+
     def __init__(self, details):
+        """Keep the exception details and format its type and message."""
+
         self.details = details
         super().__init__(details.get('type', 'Exception') + ': ' + details.get('message', ''))
 
 
 def fixture(components, component_id, arguments, receipts=()):
-    """Run a whole callable with recorded request/feedback fixtures, never a game."""
+    """Call a candidate component using an ordered sequence of request receipts.
+
+    Each emitted request consumes the matching recorded feedback. Return the
+    component result and observed interactions after every receipt is consumed.
+    """
     import tempfile
 
     observed = []
     cursor = 0
 
     def request(value):
+        """Match the next recorded request, advance the cursor, and return its feedback."""
+
         nonlocal cursor
         if cursor >= len(receipts):
             raise FixtureEvidenceMissing('Fixture has no feedback for request ' + repr(value))
@@ -217,6 +290,8 @@ def fixture(components, component_id, arguments, receipts=()):
         return evidence['feedback']
 
     async def request_async(value):
+        """Return the next recorded feedback through the async request interface."""
+
         return request(value)
 
     with tempfile.TemporaryDirectory() as directory, SkillModules(
@@ -229,8 +304,9 @@ def fixture(components, component_id, arguments, receipts=()):
         )
         result = function(*args, **kwargs)
         if inspect.isawaitable(result):
+            # result: Awaitable[Any] -> Any, the completed async skill return value.
             result = asyncio.run(result)
-    # fixture 同时比较请求顺序与消费数量，完整调用与记录中的交互对应。
+    # Every recorded interaction must be consumed by the completed call.
     if cursor != len(receipts):
         raise ValueError('Fixture contains unconsumed request evidence')
     return {'result': result, 'requests': observed}

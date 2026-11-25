@@ -1,7 +1,5 @@
-"""环境会话执行：给原生调用分配身份，保存事件并管理测量与清理。
-
-ActionSession 将公共动作转换为 bridge 调用；同一调用的请求、反馈与执行状态
-沿用同一个 request_id，供上层读取和恢复。
+"""Record native invocations and manage session heartbeats, counter measurements, and
+resource cleanup.
 """
 
 from __future__ import annotations
@@ -21,18 +19,23 @@ if __package__:
 else:
     from adapters.bridge import Bridge, NativeExecutionError, native_execution_state
 
-ROOT = Path(__file__).resolve().parents[2] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
+
 PHASES = {'setup', 'build', 'warmup', 'measure', 'diagnose'}
 
 
 def atomic_json(path, value):
+    """Write JSON to a temporary file and replace the destination, retrying transient Windows
+    replacement locks.
+    """
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + '.' + str(uuid.uuid4()) + '.tmp')
     payload = json.dumps(value, ensure_ascii=False, indent=2)
     temp.write_text(payload, encoding='utf-8')
-    # Retry only publication of the same complete bytes. Windows readers or
-    # scanners can briefly lock the destination; no action is re-executed here.
+    # Retry replacement using the same complete temporary JSON file.
+    # Windows readers can briefly hold a lock on the destination.
     for attempt in range(9):
         try:
             temp.replace(path)
@@ -44,6 +47,8 @@ def atomic_json(path, value):
 
 
 def production(before, after, ticks, seconds, warmup_ticks=0, mode='natural'):
+    """Compute net counter output per 72,000 game ticks and per 3,600 wall seconds."""
+
     if ticks <= 0 or seconds <= 0:
         raise ValueError('Measurement requires positive actual game ticks and wall duration')
     delta = after - before
@@ -64,6 +69,10 @@ def production(before, after, ticks, seconds, warmup_ticks=0, mode='natural'):
 def natural_wait(
     server, ticks, timeout_seconds=60, cancel=lambda: False, require_natural=False
 ):
+    """Poll game ticks until the target is reached or waiting ends as cancelled, frozen, or
+    timed out.
+    """
+
     if ticks < 0 or timeout_seconds <= 0:
         raise ValueError('Invalid wait')
     first = server.call('clock.query')['result']
@@ -71,6 +80,8 @@ def natural_wait(
     last = first
 
     def check_clock(clock):
+        """Check sprint state and target TPS when the caller requires natural ticking."""
+
         if require_natural and (clock['sprinting'] or clock['target_tps'] != 20):
             raise RuntimeError('Natural measurement requires no sprint and a 20 TPS target')
 
@@ -98,13 +109,25 @@ def natural_wait(
 
 
 class LocalExecutionError(RuntimeError):
-    """A passive local operation returned a known unsuccessful terminal result.
+    """Retain terminal evidence from an unsuccessful passive experiment.wait.
 
-    Correlation uses the same full envelope identity/fingerprint as RPC evidence;
-    the source remains local and never claims that its wait condition succeeded.
+    local_request is a copy of the complete method/params/run/actor/request
+    identity. local_feedback wraps the copied wait result with source=local,
+    error status, and the full request fingerprint. Supported wait outcomes are
+    timeout, stalled_frozen, and cancelled. state_for() correlates this evidence
+    with a supplied request; execution_state checks the retained original.
+
+    Example:
+        error = LocalExecutionError(wait_result, request)
+        state = error.state_for(request)
+
+    For a matching terminal wait result, state is completed: the wait ended
+    with the unsuccessful outcome retained under local_feedback.result.
     """
 
     def __init__(self, result, request):
+        """Validate the passive-wait result and build its correlated local feedback envelope."""
+
         if not isinstance(request, dict) or request.get('method') != 'experiment.wait':
             raise ValueError('Local terminal evidence is restricted to passive experiment.wait')
         if not isinstance(result, dict) or result.get('status') not in (
@@ -126,6 +149,10 @@ class LocalExecutionError(RuntimeError):
         }
 
     def state_for(self, request):
+        """Return completed when the retained local wait evidence matches this request,
+        otherwise unknown.
+        """
+
         if not isinstance(request, dict) or self.local_request != request:
             return 'unknown'
         if not isinstance(self.local_feedback, dict):
@@ -141,10 +168,49 @@ class LocalExecutionError(RuntimeError):
 
     @property
     def execution_state(self):
+        """Classify the local wait evidence against its retained original request."""
+
         return self.state_for(self.local_request)
 
 
 class ActionSession:
+    """Execute and trace native actions for one run and actor.
+
+    client and server are Bridge objects or injected implementations of call().
+    directory is the session's Path under TechMC data runs; events names its
+    trace.jsonl. sequence increases under _event_lock for each appended event.
+    Resuming restores that append sequence from the existing trace while this
+    process initializes its own cleanup and heartbeat state.
+
+    created_fakes is set[str] of players scheduled for cleanup. undo is a list
+    of restore-step dictionaries, executed in reverse order. client_settings
+    maps (method, optional key) tuples to saved setting dictionaries.
+    initial_clock is dict | None; clock_changed and preserve_clock determine
+    clock restoration. keep_conditions lists conditions retained by the server's
+    experiment.restore operation. client_required controls client cancellation.
+
+    _heartbeat_stop is a threading.Event and _heartbeat_thread is Thread | None.
+    invoke() records one invocation identity across its request and feedback,
+    tracks resources for cleanup, and polls asynchronous action completion when
+    requested. measure() writes counter-rate measurements; cleanup() restores
+    tracked resources, ends the heartbeat, records errors, and returns list[str].
+
+    Example:
+        session = ActionSession(actor, server_port=port, client_required=False)
+        feedback = session.invoke(
+            {
+                'method': 'clock.query',
+                'side': 'server',
+                'params': {},
+                'phase': 'diagnose',
+            }
+        )
+        errors = session.cleanup()
+
+    feedback is the clock RPC envelope and its invocation is stored in the
+    session trace. errors contains any cleanup failures recorded for the session.
+    """
+
     def __init__(
         self,
         actor,
@@ -156,6 +222,10 @@ class ActionSession:
         client_port=None,
         resume_existing=False,
     ):
+        """Create bridge connections and session paths, initialize tracked resources, and
+        restore the trace cursor if requested.
+        """
+
         self.run_id = run_id or str(uuid.uuid4())
         self.actor = actor
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', self.run_id):
@@ -177,14 +247,18 @@ class ActionSession:
         self.clock_changed = False
         self.preserve_clock = True
         self.keep_conditions = []
+        # client_settings: dict[tuple[str, str | None], dict], storing values used to restore
+        # client settings.
         self.client_settings = {}
         self.client_required = client_required
         self._heartbeat_stop = threading.Event()
+        # _heartbeat_thread: threading.Thread | None, assigned when start_heartbeat() launches
+        # its worker.
         self._heartbeat_thread = None
         self._event_lock = threading.Lock()
         if resume_existing:
-            # Only the append cursor is restored. Cleanup/heartbeat state belongs
-            # to this newly connected process and must never replay old effects.
+            # Restore the trace append sequence from the saved session.
+            # Cleanup resources and heartbeat state are initialized for the new connection.
             with existing_trace.open(encoding='utf-8') as stream:
                 for line in stream:
                     event = json.loads(line)
@@ -196,6 +270,10 @@ class ActionSession:
                     self.sequence = sequence
 
     def event(self, kind, **data):
+        """Append a sequenced session event and copy selected categories into the optional
+        observation stream.
+        """
+
         with self._event_lock:
             self.sequence += 1
             value = {
@@ -217,11 +295,17 @@ class ActionSession:
                         f.write(json.dumps(value, ensure_ascii=False) + '\n')
 
     def start_heartbeat(self):
+        """Start the session's five-second server heartbeat thread once."""
+
         if self._heartbeat_thread is not None:
             return
+        # Capture the bridge for this thread; an invocation can temporarily install a CLI
+        # wrapper on session.server.
         heartbeat_server = self.server
 
         def heartbeat():
+            """Send periodic server heartbeats until stopped and record connection errors."""
+
             while not self._heartbeat_stop.wait(5):
                 try:
                     heartbeat_server.call('session.heartbeat')
@@ -232,6 +316,8 @@ class ActionSession:
         self._heartbeat_thread.start()
 
     def conditions(self, label):
+        """Save and trace an experiment-conditions snapshot or its unavailable result."""
+
         try:
             value = self.server.call('experiment.conditions')
         except Exception as exc:
@@ -240,9 +326,8 @@ class ActionSession:
         self.event('experiment.conditions', label=label, result=value)
 
     def invoke(self, step, parent=None):
-        """记录原生请求及其完成状态，再向调用方交付反馈。
-
-        原生执行异常携带已有反馈；事件记录沿用原请求身份。
+        """Trace one native or local operation, track cleanup state, and return its result or
+        propagate correlated failure evidence.
         """
         invocation = step.get('request_id') or str(uuid.uuid4())
         method = step['method']
@@ -250,7 +335,7 @@ class ActionSession:
         phase = step.get('phase', 'build')
         if phase not in PHASES:
             raise ValueError('Unknown experiment phase')
-        # 原生调用与事件记录共用本次请求身份，后续反馈可以回到同一条执行记录。
+        # Use one invocation ID for the native request and its trace events.
         self.event(
             'invocation.start',
             invocation_id=invocation,
@@ -342,12 +427,16 @@ class ActionSession:
                     self.created_fakes.discard(params['id'])
                 if 'restore' in step:
                     self.undo.append(step['restore'])
+                # payload is the operation result inside the native RPC envelope returned by
+                # bridge.call().
                 payload = result.get('result', {})
                 if (
                     isinstance(payload, dict)
                     and payload.get('callbacks')
                     and not any(x['success'] for x in payload['callbacks'])
                 ):
+                    # A fill callback reporting zero actual changes is treated as a completed
+                    # no-change command.
                     no_change = (
                         method == 'command.run'
                         and payload.get('effect') == 'no_change'
@@ -436,10 +525,15 @@ class ActionSession:
                 if hasattr(e, 'add_note'):
                     e.add_note(note)
                 else:
-                    e.__notes__ = [*getattr(e, '__notes__', []), note]  # Python 3.10 runners.
+                    # Retain exception notes on Python versions without add_note().
+                    e.__notes__ = [*getattr(e, '__notes__', []), note]
             raise
 
     def measure(self, color, ticks, timeout_seconds=120, warmup_ticks=0, mode='natural'):
+        """Measure counter growth over actual game ticks and wall time, saving the resulting
+        rate record.
+        """
+
         if mode not in ('natural', 'step', 'sprint'):
             raise ValueError('Unknown measurement mode')
         if warmup_ticks:
@@ -478,6 +572,8 @@ class ActionSession:
             if mode == 'sprint' or first_clock['sprinting'] or last_clock['sprinting']
             else mode
         )
+        # Prefer the counter samples' monotonic timestamps when both are available; otherwise
+        # use the local elapsed interval.
         seconds = (
             (after['sample_monotonic_ns'] - before['sample_monotonic_ns']) / 1e9
             if 'sample_monotonic_ns' in before and 'sample_monotonic_ns' in after
@@ -505,6 +601,10 @@ class ActionSession:
         return result
 
     def cleanup(self):
+        """Remove tracked players, restore settings and clock state, stop heartbeats, and
+        return cleanup errors.
+        """
+
         errors = []
         if self.client_required:
             try:
@@ -567,8 +667,11 @@ class ActionSession:
 
     @staticmethod
     def predicate(predicate, results):
+        """Follow a dotted result path and compare its value with eq, gte, or lte."""
+
         value = results[predicate['step']]
         for key in predicate['path'].split('.'):
+            # value changes to the selected child JSON value at each predicate path segment.
             value = value[int(key)] if isinstance(value, list) else value[key]
         expected = predicate['value']
         op = predicate.get('op', 'eq')

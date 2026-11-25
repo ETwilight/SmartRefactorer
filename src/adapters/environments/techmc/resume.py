@@ -1,6 +1,5 @@
-"""Read-only verification for explicitly continuing a saved MC experiment.
-
-This is a trusted launcher boundary, never an agent RPC or a fresh-world fallback.
+"""Verify saved session, task-stream, world, and host records for explicit method
+continuation.
 """
 
 import hashlib
@@ -32,6 +31,16 @@ def resume_descriptor(
     initialization_recovery,
     recovery_receipt=None
 ):
+    """Verify a saved run and return its original connection and task-binding descriptor.
+
+    workflows lists accepted report workflows. uninvoked(source) checks an
+    API-only checkpoint lacking primitive trace evidence; initialization_recovery
+    verifies any method-specific startup recovery. Compare archived and live
+    session files, task arrivals, selected profile, world generation, and host
+    identity before returning the descriptor and any verified recovery approval.
+    """
+    # source becomes a Path before the absolute-directory and saved-record checks.
+
     source = Path(source)
     if not source.is_absolute():
         raise ValueError('Explicit resume requires an absolute run directory')
@@ -40,6 +49,7 @@ def resume_descriptor(
     report = _read_json_retry(source / 'report.json')
     if report.get('workflow') not in workflows:
         raise ValueError('Explicit checkpoint belongs to a different method')
+    # approval: dict | None, containing a verified passive-wait recovery record when supplied.
     approval = None
     if report.get('status') == 'pending_request_unresolved':
         if recovery_receipt is None:
@@ -189,6 +199,8 @@ def resume_descriptor(
         or (position < 0)
     ):
         raise ValueError('Invalid original stream position')
+    # arrivals: list[str], rebuilt from the original manifest and deferred visits in completed
+    # history.
     arrivals = list(manifest['task_ids'])
     for index, entry in enumerate(history):
         if (
@@ -216,6 +228,7 @@ def resume_descriptor(
                 candidates.append(value)
     if len(candidates) != 1:
         raise ValueError('Original visit has no unique task instance')
+    # value: dict, the unique completed task.start result for the interrupted visit.
     value = candidates[0]
     instance = _read_json_retry(root / 'runs/task-instances' / (value['id'] + '.json'))
     for key in (
@@ -312,6 +325,8 @@ def resume_descriptor(
         'stream_position': position,
         'session_id': session_id,
     }
+    # descriptor: dict of original connection settings, saved-host identity, and verified
+    # task/world binding.
     descriptor = {
         'api_only_before_invocation': api_only,
         'source_run': str(source),
@@ -367,13 +382,18 @@ def resume_descriptor(
 
 
 def _signed_bytes(value):
+    """Encode sorted, compact UTF-8 JSON bytes for recovery-receipt authentication."""
+
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode(
         'utf-8'
     )
 
 
 def _owner(root, experiment_id):
+    """Return the experiment folder, owner token, and SHA-256 owner-token hash."""
+
     folder = Path(root) / 'runtime/experiments' / experiment_id
+    # token: str used as the HMAC key; its SHA-256 hash is the public owner identifier.
     token = (folder / 'owner.token').read_text(encoding='utf-8').strip()
     if not token:
         raise PermissionError('Missing original owner credential')
@@ -381,6 +401,10 @@ def _owner(root, experiment_id):
 
 
 def verify_unstarted_recovery(path, descriptor, *, root):
+    """Authenticate an unstarted-allocation recovery receipt and verify its source and
+    failed-attempt hashes.
+    """
+
     receipt = _read_json_retry(path)
     body = {k: v for k, v in receipt.items() if k != 'owner_hmac_sha256'}
     _, token, owner = _owner(root, descriptor['experiment_id'])
@@ -413,10 +437,12 @@ def verify_unstarted_recovery(path, descriptor, *, root):
 
 
 def create_unstarted_recovery(source_run, failed_run, output_path, *, root, descriptor_for):
-    """Sign a new zero-paid recovery receipt; never edit historical documents.
+    """Sign a recovery receipt for an allocation recorded as unstarted after its world was
+    released.
 
-    The world must already have been saved/stopped and its lease explicitly
-    released by its owner. This function performs no physical lifecycle action.
+    Verify the failed allocation, original owner, stopped-world records, and
+    released locks under the host lease. Save an immutable manager snapshot and
+    write a new signed receipt at output_path, returning that receipt dictionary.
     """
     root = Path(root).resolve()
     failed_run = Path(failed_run).resolve()
@@ -471,6 +497,7 @@ def create_unstarted_recovery(source_run, failed_run, output_path, *, root, desc
             )
         ):
             raise ValueError('Failed attempt contains method/accounting evidence')
+        # original: bytes retained for both the manager snapshot and its content hash.
         original = (folder / 'manager.json').read_bytes()
         manager = json.loads(original)
         if (

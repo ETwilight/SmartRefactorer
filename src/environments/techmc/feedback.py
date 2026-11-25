@@ -1,7 +1,9 @@
-"""Lossless game-result projection: remove duplicate internal RPC transport fields."""
+"""Remove internal fingerprint and key fields from recognized RPC result dictionaries."""
 
 
 def public_result(value):
+    """Recursively copy JSON results while omitting fingerprint and key from RPC envelopes."""
+
     if isinstance(value, list):
         return [public_result(item) for item in value]
     if not isinstance(value, dict):

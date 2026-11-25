@@ -1,8 +1,4 @@
-"""实验资源生命周期：准备实例、启动、维护心跳、切换任务世界、保存和收尾。
-
-Experiment 保存宿主记录与服务器状态；任务访问使用 HostTaskWorlds 记录世界身份，
-本地进程和远程命令分别由对应的执行分支处理。
-"""
+"""Manage an experiment's server ownership, task worlds, and process lifetime."""
 
 from .paths import SOURCE_ROOT
 import json
@@ -54,10 +50,12 @@ else:
     from host_resources import admission, memory, process_memory, CapacityUnavailable
     from task_selection import TaskSelection
 
-ROOT = Path(__file__).resolve().parents[2] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
 
 
 def _unlinked(path):
+    """Return whether a path is free of symbolic-link and reparse-point markers."""
+
     if path.is_symlink() or (
         path.exists() and getattr(path.lstat(), 'st_file_attributes', 0) & 0x400
     ):
@@ -67,11 +65,11 @@ def _unlinked(path):
 def uninitialized_world_proof(
     root, port, experiment_id, token, state, *, task_world_state=None
 ):
-    """Local-only proof for a stopped fresh allocation with nothing to save.
+    """Describe an owned world that stopped before its first server initialization.
 
-    This never deletes data or marks a world saved. Callers must not translate
-    remote host paths into local paths. A historical reconciliation can persist
-    this proof in a NEW receipt and use the existing authenticated lease API.
+    Check the instance identity, process state, control records, and prepared
+    world contents. Return the evidence used to finish a local allocation
+    without a save acknowledgement when the server never initialized a world.
     """
     root = Path(root).resolve()
     port = int(port)
@@ -198,6 +196,30 @@ def uninitialized_world_proof(
 
 
 class Experiment:
+    """Own the server, task-world lease, and method process for one experiment.
+
+    The manager records startup and shutdown in the experiment directory.
+    A fresh run allocates a server instance. A resumed run reuses the retained
+    instance and writes a separate attempt record until the server acknowledges
+    the new launch. The canonical manager record is published after that
+    acknowledgement.
+
+    ``server`` is the local supervisor process, or None for remote startup.
+    ``child`` is the method process when one has been attached. ``task_worlds``
+    is a HostTaskWorlds controller when task switching is enabled, otherwise
+    None. The controller dispatches world requests through the manager's switch
+    callback while the maintenance thread renews ownership and samples memory.
+
+    Example:
+        experiment = Experiment(port=18776, task_worlds=True)
+        experiment.start()
+        state = experiment.state()
+        experiment.finish('completed')
+
+    This starts an owned server, reads its current state, and records its
+    shutdown. A method runner can use the server between start and finish.
+    """
+
     def __init__(
         self,
         port=18776,
@@ -210,6 +232,13 @@ class Experiment:
         task_worlds=False,
         resume_saved=None,
     ):
+        """Prepare the experiment record, credentials, and optional world controller.
+
+        ``root`` is the host data directory. A saved resume verifies the retained
+        instance and stages a new launch record before startup. ``task_selection``
+        determines which tasks the world controller can activate.
+        """
+
         self.root = Path(root)
         self.port = port
         self.heap_mb = heap_mb
@@ -453,9 +482,13 @@ class Experiment:
 
     @property
     def record_path(self):
+        """Return the staged attempt path or the canonical manager record path."""
+
         return self._resume_attempt_path or self.folder / 'manager.json'
 
     def save_record(self):
+        """Write the attempt record and, once published, the manager record."""
+
         attempt = getattr(self, '_resume_attempt_path', None)
         if attempt:
             write(attempt, self.record)
@@ -463,6 +496,8 @@ class Experiment:
             write(self.folder / 'manager.json', self.record)
 
     def _confirm_startup_epoch(self, state):
+        """Match the server's acknowledged launch to this resume attempt."""
+
         if state.get('experiment_id') != self.id or state.get('launch_id') != self._launch_id:
             return False
         native = (
@@ -487,6 +522,8 @@ class Experiment:
         return True
 
     def _publish_ready_record(self):
+        """Publish a ready resume after checking the original record's hash."""
+
         if getattr(self, '_resume_staged', False):
             if not self._startup_epoch_confirmed:
                 raise RuntimeError('Resume READY has no verified startup epoch')
@@ -506,6 +543,13 @@ class Experiment:
             self.save_record()
 
     def _finish_unpublished_resume(self, outcome):
+        """Record a resume attempt that has not published its manager record.
+
+        A dispatched launch may already own server resources. Its acknowledgement
+        determines whether ordinary shutdown can proceed. An attempt that stopped
+        before dispatch releases its task-world lease here.
+        """
+
         if not self._resume_staged:
             return None
         errors = []
@@ -561,6 +605,8 @@ class Experiment:
         return self.record
 
     def state(self):
+        """Read the current server state from the selected host."""
+
         if self.remote:
             return self.remote.state(fresh=True)
         path = self.root / 'runtime/servers' / str(self.port) / 'current.json'
@@ -570,6 +616,8 @@ class Experiment:
         return value
 
     def heartbeat(self):
+        """Renew this experiment's ownership record on the server host."""
+
         if self.remote:
             self.remote.execute(
                 "sys.path.insert(0,str(root))\nfrom experiment_registry import heartbeat\nheartbeat(root,cfg['experiment_id'],cfg['owner_token'])\n",
@@ -579,7 +627,12 @@ class Experiment:
             heartbeat(self.root, self.id, self.token)
 
     def start(self):
-        """准备服务器实例和任务选择，启动对应后端并发布 ready 状态。"""
+        """Acquire the lease, start the server, and publish the running record.
+
+        Startup waits for the experiment and launch identities to match before
+        accepting the ready state. Remote runs also establish the local tunnel.
+        Once ready, the maintenance thread handles heartbeats and world requests.
+        """
         self.record['status'] = 'allocating'
         self.save_record()
         arguments = [
@@ -760,6 +813,8 @@ class Experiment:
             raise
 
     def _maintain(self):
+        """Renew ownership, sample process memory, and dispatch world requests."""
+
         next_heartbeat = 0
         while not self.stopped.wait(0.2):
             try:
@@ -796,6 +851,8 @@ class Experiment:
                 self.save_record()
 
     def _process_world_request(self, request):
+        """Process one world request and record a rejected receipt on failure."""
+
         try:
             self.task_worlds.process(request)
         except Exception as exc:
@@ -821,6 +878,13 @@ class Experiment:
                     )
 
     def _stop_task_server(self):
+        """Save and stop the owned server before changing its task world.
+
+        Return the stopped state after checking the exit status, final save, and
+        supervisor lock. The switch callback uses this state to continue the world
+        transition.
+        """
+
         state = self.state()
         if state.get('experiment_id') != self.id:
             raise PermissionError('Refuse to switch a foreign world')
@@ -867,6 +931,13 @@ class Experiment:
         return state
 
     def _switch_task_world(self, request):
+        """Release, resume, or create the physical world named by a task request.
+
+        Serialize switches with shutdown. Reusing a ready retained world checks
+        its ownership and path; other activations stop the current instance and
+        wait for the selected instance to become ready.
+        """
+
         with self._switch_lock:
             if self._finishing:
                 raise RuntimeError('Experiment is finishing; no task-world transition started')
@@ -888,6 +959,7 @@ class Experiment:
                     'outcome': request.get('outcome'),
                 }
             state = self.state()
+            # retained is a saved-world dict, or None when this task needs a fresh world.
             retained = request.get('retained')
             if (
                 retained
@@ -984,6 +1056,12 @@ class Experiment:
             }
 
     def save(self, state):
+        """Request a world save and return its matching acknowledgement.
+
+        The unique label pairs the response with this request. Remote responses
+        arrive as JSON text and are decoded to the same dict used locally.
+        """
+
         label = 'finish-' + str(uuid.uuid4())
         if self.remote:
             raw = self.remote.execute(
@@ -1014,9 +1092,12 @@ class Experiment:
         raise TimeoutError('Final save not confirmed')
 
     def finish(self, outcome='completed'):
-        """汇总运行状态，保存世界、停止实例并释放宿主资源。
+        """Save the world, stop the server, and record the shutdown result.
 
-        每一步的完成情况写入记录，后续调用据此继续收尾。
+        Wait for an in-flight world switch, then collect save and process-exit
+        evidence. Release the task-world lease after clean shutdown. The returned
+        record contains the requested outcome, cleanup errors, and separate save
+        and resource-release flags. An unresolved transition keeps host ownership.
         """
         if getattr(self, '_finished', False):
             return self.record
@@ -1046,6 +1127,7 @@ class Experiment:
         state = {}
         saved = False
         released = False
+        # A staged resume can finalize the host record once its launch is acknowledged.
         finalize_epoch = not getattr(self, '_resume_staged', False)
         if self.task_worlds and self.task_worlds.state.get('pending'):
             errors.append(
@@ -1138,6 +1220,7 @@ class Experiment:
                     self.server.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     errors.append('Local supervisor has not exited')
+            # None becomes an evidence dict if the stopped world was never initialized.
             save_not_required = None
             if released and not saved and self.allocated and not self.remote:
                 try:
@@ -1224,9 +1307,17 @@ class Experiment:
         return self.record
 
     def run(self, command, cwd=None):
+        """Start the server, run a method command, and finish after the process exits.
+
+        Return the method's exit code. SIGTERM on the main thread follows the
+        cancellation path, which terminates the child before server cleanup.
+        """
+
         outcome = 'failed'
 
         def terminate(signum, frame):
+            """Route SIGTERM through the runner's cancellation path."""
+
             raise KeyboardInterrupt('Experiment cancelled')
 
         previous = None
@@ -1234,6 +1325,7 @@ class Experiment:
             previous = signal.signal(signal.SIGTERM, terminate)
         try:
             self.start()
+            # Copy the argument sequence into a mutable list[str] before resolving argv[0].
             command = list(command)
             workdir = Path(cwd or self.root).resolve()
             candidate = workdir / command[0]
@@ -1261,9 +1353,13 @@ class Experiment:
                 raise RuntimeError('Experiment cleanup incomplete: ' + str(self.record_path))
 
     def __enter__(self):
+        """Start the experiment and return this manager."""
+
         return self.start()
 
     def environment(self, actor='ETwilight', **kwargs):
+        """Create an Environment whose bridge uses this experiment's credentials."""
+
         if __package__:
             from .environment import Environment
             from .runtime_support import ActionSession
@@ -1287,6 +1383,8 @@ class Experiment:
         )
 
     def __exit__(self, kind, value, trace):
+        """Finish with the context's outcome and report incomplete cleanup."""
+
         result = self.finish('completed' if kind is None else 'failed')
         if kind is None and result['status'] == 'cleanup_failed':
             raise RuntimeError('Experiment cleanup incomplete; inspect manager.json')

@@ -1,4 +1,6 @@
-"""Conservation of actual vanilla cooking events, fuel and in-flight inventory."""
+"""Reconcile recipe events, fuel consumption, and material stocks across acceptance
+snapshots.
+"""
 
 if __package__:
     from environments.techmc.acceptance.harvest import source_drop_delta
@@ -7,6 +9,10 @@ else:
 
 
 def cold_start(region, feedstocks, item_stock):
+    """Check initial furnace fuel/burn state and fuel-item stocks outside the declared raw
+    feedstocks.
+    """
+
     fuels = set(region.get('fuel_item_ids', []))
     if 'furnace_states' not in region or 'fuel_item_ids' not in region:
         raise RuntimeError('Fuel-state telemetry unavailable')
@@ -27,8 +33,14 @@ def cold_start(region, feedstocks, item_stock):
 
 
 def cooking_balance(start, end, item_stock, source_drops=None):
+    """Reconcile recipe-related inventory changes with consumed/produced/fuel events and
+    observed natural source drops.
+    """
+
     if not start.get('cooking_epoch') or start.get('cooking_epoch') != end.get('cooking_epoch'):
         raise RuntimeError('Cooking ledger restarted or is unavailable')
+    # delta: dict[str, dict[str, int]], containing per-item consumed, produced, and fuel event
+    # increments.
     delta = {}
     for field in ('consumed', 'produced', 'fuel'):
         a = start['cooking_totals'][field]
@@ -37,6 +49,7 @@ def cooking_balance(start, end, item_stock, source_drops=None):
         if any(n < 0 for n in delta[field].values()):
             raise RuntimeError('Cooking ledger counters decreased')
     if source_drops is None:
+        # source_drops changes from None to dict[str, int] of observed natural input generation.
         source_drops = source_drop_delta(start, end)
     if any(not isinstance(n, int) or n < 0 for n in source_drops.values()):
         raise RuntimeError('Invalid natural input-generation adjustment')
@@ -66,6 +79,10 @@ def cooking_balance(start, end, item_stock, source_drops=None):
 
 
 def autonomous_fuel(start, end, feedstocks):
+    """Check that post-warmup fuel consumption is positive and excludes direct burning of
+    declared raw feedstocks.
+    """
+
     delta = {
         item: end['cooking_totals']['fuel'].get(item, 0)
         - start['cooking_totals']['fuel'].get(item, 0)
@@ -80,7 +97,11 @@ def autonomous_fuel(start, end, feedstocks):
 
 
 def conversion_balance(conversion, start, end, item_stock):
+    """Compare total input consumption and output growth with the declared conversion ratio."""
+
     def total(region, item):
+        """Count the item in region inventories, placed blocks, and falling blocks."""
+
         if 'inflight_block_counts' not in region:
             raise RuntimeError('Falling-block stock telemetry unavailable')
         return (
@@ -101,7 +122,13 @@ def conversion_balance(conversion, start, end, item_stock):
 
 
 def wither_recipe_balance(start, end, item_stock):
+    """Reconcile net star/live-wither growth with four soul materials and three skulls
+    consumed per unit.
+    """
+
     def stocks(r, items):
+        """Sum inventory and placed-block stocks across equivalent material item IDs."""
+
         return sum(item_stock(r, i) + r['block_counts'].get(i, 0) for i in items)
 
     sand = ('minecraft:soul_sand', 'minecraft:soul_soil')
@@ -123,10 +150,18 @@ def wither_recipe_balance(start, end, item_stock):
 
 
 def material_growth_balance(items, start, end, new_output, item_stock, renew_inputs=False):
+    """Check that total material growth covers credited output and optionally check
+    operating-input depletion.
+    """
+
     def inventory(r, item):
+        """Add operating-player holdings to the region inventory and loose-item count."""
+
         return item_stock(r, item) + r.get('operating_player_counts', {}).get(item, 0)
 
     def material(r, item):
+        """Add placed and falling-block stocks to the item's complete inventory count."""
+
         return (
             inventory(r, item)
             + r['block_counts'].get(item, 0)
@@ -134,12 +169,18 @@ def material_growth_balance(items, start, end, new_output, item_stock, renew_inp
         )
 
     def total(r):
+        """Sum complete stocks for the material family after checking falling-block
+        telemetry.
+        """
+
         if 'inflight_block_counts' not in r:
             raise RuntimeError('Falling-block stock telemetry unavailable')
         return sum(material(r, i) for i in items)
 
     growth = total(end) - total(start)
     depleted = {}
+    # shells: dict[str, int] | None, populated with before/after box-body stock when
+    # renew_inputs is enabled.
     shells = None
     if renew_inputs:
         initial_items = set(start.get('total_item_counts', {})) | set(
@@ -163,8 +204,8 @@ def material_growth_balance(items, start, end, new_output, item_stock, renew_inp
             'before': sum(material(start, i) for i in shell_items),
             'after': sum(material(end, i) for i in shell_items),
         }
-        # Supplied box bodies are packaging consumables. Their stock is
-        # diagnostic only; the task never requires an upstream shell farm.
+        # Record supplied box bodies as packaging-stock diagnostics.
+        # Their stock change is excluded from the operating-input depletion result.
     return {
         'material_net_growth': growth,
         'new_collected_output': new_output,
@@ -175,7 +216,9 @@ def material_growth_balance(items, start, end, new_output, item_stock, renew_inp
 
 
 def world_output_balance(products, start, end, collected, item_stock):
-    """A preplaced block reservoir cannot be credited as new renewable output."""
+    """Compare credited products with their inventory, player, placed-block, and
+    falling-block stock growth.
+    """
     block_aliases = {
         'minecraft:weeping_vines': ('minecraft:weeping_vines', 'minecraft:weeping_vines_plant'),
         'minecraft:twisting_vines': (
@@ -185,6 +228,8 @@ def world_output_balance(products, start, end, collected, item_stock):
     }
 
     def total(r, item):
+        """Count a product's complete stock, including its equivalent world-block variants."""
+
         if 'inflight_block_counts' not in r:
             raise RuntimeError('In-flight block stock telemetry unavailable')
         return (

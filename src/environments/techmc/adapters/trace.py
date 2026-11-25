@@ -1,3 +1,5 @@
+"""Configure category-filtered session observations and read their saved event sequence."""
+
 import json
 from pathlib import Path
 import re
@@ -10,12 +12,34 @@ else:
 
 
 class Trace:
+    """Control the optional observation stream for an existing session run ID.
+
+    directory is the session Path under TechMC data runs. start() writes category
+    filters in trace-config.json; ActionSession.event() reads that configuration
+    and copies selected future events into observations.jsonl. stop() disables
+    copying. read() reads saved observations after a sequence cursor. The
+    session's full invocation trace is managed separately by ActionSession.
+
+    Example:
+        trace = Trace(run_id)
+        trace.start(categories=['invocation.end'])
+        events = trace.read(after_sequence=0, limit=5)
+        trace.stop()
+
+    start() enables copying completed-invocation events. events contains up to
+    five observations already present in the saved stream when read() runs.
+    """
+
     def __init__(self, run_id):
+        """Validate the run ID and select its existing session directory."""
+
         if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', run_id):
             raise ValueError('Invalid run ID')
         self.directory = ROOT / 'runs' / run_id
 
     def start(self, categories=None, region=None):
+        """Enable observation recording for the selected event categories."""
+
         if region is not None:
             raise ValueError(
                 'Regional internal event instrumentation is not enabled; action trace supports category filtering only'
@@ -31,6 +55,8 @@ class Trace:
         return config
 
     def stop(self):
+        """Disable observation recording and save its stop timestamp."""
+
         config = json.loads((self.directory / 'trace-config.json').read_text())
         config['active'] = False
         config['stopped_ns'] = time.time_ns()
@@ -38,6 +64,10 @@ class Trace:
         return config
 
     def read(self, after_sequence=0, limit=100):
+        """Read observations after the sequence cursor, with the requested limit capped at
+        1000.
+        """
+
         path = self.directory / 'observations.jsonl'
         if not path.exists():
             return []

@@ -1,4 +1,4 @@
-"""Private local JSON boundary for the environment's immutable knowledge corpus."""
+"""Serve local Wiki and source queries over the knowledge subprocess JSON interface."""
 
 from pathlib import Path as _BootstrapPath
 import sys as _BootstrapSys
@@ -12,12 +12,16 @@ from pathlib import Path
 import sqlite3
 import sys
 
-ROOT = Path(__file__).resolve().parents[2] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
 
 from environments.techmc.adapters.knowledge import ZimWiki, SourceIndex
 
 
 def preflight():
+    """Open the downloaded ZIM archive and verify the SQLite source-index schema and indexed
+    content.
+    """
+
     from libzim.reader import Archive
 
     archives = sorted((ROOT / 'knowledge/wiki/zim').glob('*.zim'))
@@ -37,6 +41,10 @@ def preflight():
 
 
 def dispatch(request):
+    """Validate a method/params request and execute its Wiki or source query, encoding binary
+    assets as base64.
+    """
+
     if (
         not isinstance(request, dict)
         or set(request) != {'method', 'params'}
@@ -48,6 +56,8 @@ def dispatch(request):
     if method in ('wiki.search', 'wiki.read', 'wiki.provenance'):
         return getattr(ZimWiki(), method.split('.')[1])(**params)
     if method == 'wiki.asset':
+        # data: bytes; mime: str. The response represents the binary asset as an ASCII base64
+        # string.
         data, mime = ZimWiki().asset(**params)
         if len(data) > 4 * 1024 * 1024:
             raise ValueError('Asset exceeds 4 MiB response limit')
@@ -58,10 +68,14 @@ def dispatch(request):
 
 
 def main():
+    """Run preflight or one stdin query and print a JSON result or serialized exception."""
+
     try:
         result = preflight() if sys.argv[1:] == ['--check'] else dispatch(json.load(sys.stdin))
         reply = {'ok': True, 'result': result}
     except Exception as exc:
+        # args: list of JSON values, with unsupported exception arguments replaced by their str
+        # representation.
         args = []
         for value in exc.args:
             try:

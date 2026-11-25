@@ -1,4 +1,6 @@
-"""Typed public parameters for formerly opaque server/local tools."""
+"""Define supplemental primitive parameter schemas and convert container locator
+representations.
+"""
 
 import copy
 
@@ -31,20 +33,20 @@ NATIVE_CONTAINER['oneOf'][0]['properties']['position'] = BLOCK_POSITION
 
 
 def native_action(action):
-    """Translate validated public locators without altering the public request."""
+    """Copy an action and replace public container position arrays with native x/y/z fields."""
     result = copy.deepcopy(action)
     if result.get('method') == 'observe.containers':
         for locator in result['params']['containers']:
             if 'position' in locator:
+                # The locator changes shape from a position list to separate native coordinate
+                # fields.
                 locator['x'], locator['y'], locator['z'] = locator.pop('position')
     return result
 
 
 def public_validation_action(action):
-    """Public validation view of a native action at the internal CLI boundary.
-
-    This does not admit xyz in the public batch-container contract. Malformed
-    or ambiguous native locators remain unchanged for public validation to reject.
+    """Rebuild position arrays from unambiguous native x/y/z locators for CLI public
+    validation.
     """
     result = copy.deepcopy(action)
     if result.get('method') == 'observe.containers':
@@ -54,11 +56,18 @@ def public_validation_action(action):
                 and all(key in locator for key in ('x', 'y', 'z'))
                 and not any(key in locator for key in ('position', 'entity_uuid'))
             ):
+                # Replace the three native coordinate fields with the public position list.
                 locator['position'] = [locator.pop(key) for key in ('x', 'y', 'z')]
     return result
 
 
 def extra_schema(method):
+    """Return a supplemental method-specific parameter schema, or None when this module
+    supplies none.
+    """
+    # number, integer, and text are JSON Schema dictionaries reused in the method-specific
+    # shapes below.
+
     number = {'type': 'number'}
     integer = INT32
     text = {'type': 'string'}
@@ -159,6 +168,7 @@ def extra_schema(method):
         }
     if method.startswith('fake_player.'):
         props = {'id': {'type': 'string', 'pattern': '^[A-Za-z0-9_]{1,16}$'}}
+        # required: list[str] of parameter names; props maps those names to their JSON schemas.
         required = ['id']
         op = method.split('.')[1]
         if op == 'spawn':

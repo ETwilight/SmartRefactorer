@@ -1,4 +1,4 @@
-"""Install the built bridge by ordinary file copies, preserving previous JARs."""
+"""Install a built bridge JAR and retain previous versions by content hash."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -12,18 +12,25 @@ import shutil
 import time
 import zipfile
 
-ROOT = Path(__file__).resolve().parents[3] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
+
+
+from environments.techmc.paths import ASSET_ROOT
 
 
 def sha(path):
+    """Return the SHA-256 digest of a bridge JAR."""
+
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def main():
+    """Deploy to the research server and optionally the configured client instance."""
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--client', action='store_true')
     args = parser.parse_args()
-    source = ROOT / 'bridge/build/minecraft-agent-26.1.jar'
+    source = ASSET_ROOT / 'bridge/build/minecraft-agent-26.1.jar'
     with zipfile.ZipFile(source) as archive:
         if json.loads(archive.read('fabric.mod.json'))['id'] != 'techmc_env':
             raise ValueError('Unexpected bridge mod ID')
@@ -43,6 +50,7 @@ def main():
         ):
             raise ValueError('Linked deployment target refused')
         if target.exists():
+            # The old content hash lets repeated deployments share one backup.
             backup = ROOT / 'runtime/bridge-history' / (sha(target) + '.jar')
             backup.parent.mkdir(parents=True, exist_ok=True)
             if not backup.exists():

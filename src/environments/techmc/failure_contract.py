@@ -1,4 +1,9 @@
-"""Canonical failure projections; transport recovery never establishes machine success."""
+"""Normalize infrastructure failures, execution certainty, and evaluation reports.
+
+Response status describes the protocol result. execution records whether
+dispatch started or completed, while infrastructure records measurement,
+cleanup, and persistence failures that affect the evaluation verdict.
+"""
 
 import copy
 import json
@@ -17,8 +22,13 @@ else:
 
 
 def fault(exc):
-    # Preserve the actual validation failure while execution certainty is carried
-    # separately by its typed pre-dispatch wrapper.
+    """Extract the original exception type and message, including notes, for a bounded error
+    record.
+    """
+    # Unwrap the pre-dispatch exception to retain the original validation error.
+    # The caller carries dispatch certainty separately in execution metadata.
+    # exc may change from an OperationNotStarted wrapper to its underlying exception.
+
     exc = getattr(exc, 'original_exception', exc)
     message = str(exc)
     notes = getattr(exc, '__notes__', None)
@@ -28,10 +38,14 @@ def fault(exc):
 
 
 def request_hash(request):
+    """Hash the request with response-presentation options omitted."""
+
     return stable_hash({k: v for k, v in request.items() if k != 'response'})
 
 
 def is_report(value):
+    """Recognize an evaluation-report dictionary by its required identity and result fields."""
+
     return isinstance(value, dict) and {
         'evaluation_id',
         'task_instance_id',
@@ -43,6 +57,10 @@ def is_report(value):
 
 
 def report(value):
+    """Normalize infrastructure and cleanup outcomes, then validate the copied evaluation
+    report.
+    """
+
     value = copy.deepcopy(value)
     interrupted = value.get('metrics', {}).get('infrastructure_failure')
     if interrupted:
@@ -73,6 +91,10 @@ def report(value):
 
 
 def execution(request, response, started=True, known_state=None):
+    """Derive execution state and retry instructions from response status and dispatch
+    certainty.
+    """
+
     status = response['status']
     op = request.get('op')
     if (known_state == 'not_started' or not started) and op in (
@@ -153,6 +175,10 @@ def execution(request, response, started=True, known_state=None):
 
 
 def response(value, request=None):
+    """Copy a response, normalize any evaluation report, fill execution metadata, and
+    validate it.
+    """
+
     value = copy.deepcopy(value)
     if is_report(value.get('result')):
         value['result'] = report(value['result'])
@@ -165,6 +191,10 @@ def response(value, request=None):
 
 
 def view(value, options=None):
+    """Select a response view or return a selection error referencing the retained original
+    feedback.
+    """
+
     if __package__:
         from .response_views import present
     else:
@@ -192,6 +222,8 @@ def view(value, options=None):
 
 
 def interrupted_report(instance, submission, evaluation_id, directory, exc):
+    """Construct a validated inconclusive evaluation report for an interrupted measurement."""
+
     cause = fault(exc)
     return report(
         {
@@ -221,7 +253,9 @@ def interrupted_report(instance, submission, evaluation_id, directory, exc):
 
 
 def persist_report(root, value):
-    """Finalize only this environment's report path, retaining pre-recovery evidence."""
+    """Save normalized evaluation and evidence files, retaining the first replaced report
+    separately.
+    """
     value = report(value)
     directory = Path(root) / 'runs' / value['evaluation_id']
     directory.mkdir(parents=True, exist_ok=True)
@@ -237,6 +271,7 @@ def persist_report(root, value):
         if evidence_path.exists()
         else {'observations': []}
     )
+    # evidence.result and value now refer to the same report dictionary.
     evidence['result'] = value
     atomic_json(evidence_path, evidence)
     atomic_json(path, value)
@@ -244,10 +279,14 @@ def persist_report(root, value):
 
 
 def write_measurement(directory, evidence, value):
-    """Preserve the measured checks even if the first evidence write fails."""
+    """Update the report in place, write its evidence, and mark measurement invalid if
+    persistence fails.
+    """
     normalized = report(value)
+    # Keep this dict's identity while replacing its contents with the normalized report.
     value.clear()
     value.update(normalized)
+    # evidence.result and value now refer to the same report dictionary.
     evidence['result'] = value
     try:
         atomic_json(directory / 'evidence.json', evidence)
@@ -260,6 +299,7 @@ def write_measurement(directory, evidence, value):
         info['persistence_error'] = fault(exc)
         info['measurement_valid'] = False
         normalized = report(value)
+        # Keep this dict's identity while replacing its contents with the normalized report.
         value.clear()
         value.update(normalized)
         for path, body in (

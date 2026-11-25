@@ -26,10 +26,28 @@ import net.minecraft.world.level.Level;
 import java.util.*;
 import static research.agent.RpcServer.*;
 
+/**
+ * Connect authenticated RPC to server-thread TechMC observations and operations.
+ *
+ * Fabric lifecycle hooks start and close RpcServer. Each dispatched request renews
+ * its run's monotonic lease. Fake-player ownership, pending retirement, and operation
+ * helpers are tracked by player name; tick callbacks advance operations and release
+ * expired run conditions. Connection serials retain actor reconnect evidence.
+ * Public command execution applies CommandPolicy, captures callbacks and message
+ * keys, and records temporary conditions through EnvironmentGuard. Specialized
+ * readback delegates to the observation and ledger helpers.
+ *
+ * <pre>{@code
+ * ServerBridge bridge = new ServerBridge();
+ * bridge.onInitialize();
+ * }</pre>
+ * Fabric invokes this entrypoint to register the server lifecycle and tick callbacks.
+ */
 public class ServerBridge implements ModInitializer {
     private RpcServer rpc;
     private MinecraftServer server;
     private final Map<String, String> fakeOwners = new HashMap<>();
+    // Lease values are System.nanoTime timestamps; expiration uses thirty seconds of wall time.
     private final Map<String, Long> leases = new HashMap<>();
     private final Set<String> retiringFakes = new HashSet<>();
     private final Map<String,BucketBatch> bucketBatches=new HashMap<>();
@@ -37,6 +55,7 @@ public class ServerBridge implements ModInitializer {
     private final Map<String,OffhandUse> offhandUses=new HashMap<>();
     private final Map<String,MaterialUse> materialUses=new HashMap<>();
     private final Map<String,String> completedFakeOwners=new LinkedHashMap<>() {
+        /** Bound completed fake-player ownership receipts to the latest 4096 insertions. */
         protected boolean removeEldestEntry(Map.Entry<String,String> entry){return size()>4096;}
     };
     private EnvironmentGuard environment;
@@ -45,10 +64,11 @@ public class ServerBridge implements ModInitializer {
     private final List<String> cleanupFailures=new ArrayList<>();
     private final Map<UUID,Long> connectionSerials=new HashMap<>();
     private final Map<String,UUID> knownActorIds=new HashMap<>();
+    /** Register actor connection, server lifecycle, and owned-operation tick callbacks. */
     public void onInitialize() {
         ServerPlayConnectionEvents.JOIN.register((handler,sender,s)->{
             recordConnection(handler.player.getUUID(),handler.player.getPlainTextName());
-            // Human clients are observers. Carpet actors retain their task-controlled modes.
+            // Joining human clients enter spectator mode; evaluator-owned Carpet actors retain their mode.
             if(!handler.player.getClass().getName().equals("carpet.patches.EntityPlayerMPFake"))
                 handler.player.setGameMode(net.minecraft.world.level.GameType.SPECTATOR);
         });
@@ -96,9 +116,11 @@ public class ServerBridge implements ModInitializer {
             for(String run:List.copyOf(leases.keySet()))if(System.nanoTime()-leases.get(run)>30_000_000_000L){environment.restore(run,Set.of());leases.remove(run);performanceTelemetry.remove(run);}
         });
     }
+    /** Advance the actor connection serial and index its UUID by name and UUID text. */
     private void recordConnection(UUID id,String name){
         connectionSerials.merge(id,1L,Long::sum);knownActorIds.put(name,id);knownActorIds.put(id.toString(),id);
     }
+    /** Read an actor's connection identity and current life state, including offline serials. */
     private JsonElement actorState(String actor){
         var player=server.getPlayerList().getPlayerByName(actor);
         if(player==null){try{player=server.getPlayerList().getPlayer(UUID.fromString(actor));}catch(IllegalArgumentException ignored){}}
@@ -120,10 +142,12 @@ public class ServerBridge implements ModInitializer {
         }
         return json(value);
     }
+    /** Execute an internal console command and require a successful dispatcher callback. */
     private int raw(String command) {
         var source = server.createCommandSourceStack().withSuppressedOutput();
         var parsed = server.getCommands().getDispatcher().parse(command, source);
         if (parsed.getReader().canRead()) throw new IllegalArgumentException("Parse failure: " + parsed.getExceptions());
+        // One-element arrays retain callback results across the command-dispatch lambda.
         final int[] result = {0};
         final boolean[] succeeded={false};
         source = source.withCallback((success, value) -> {result[0] = value;succeeded[0]|=success;});
@@ -131,15 +155,18 @@ public class ServerBridge implements ModInitializer {
         if(!succeeded[0])throw new IllegalStateException("Carpet operation failed: "+command);
         return result[0];
     }
+    /** Resolve a requested dimension, defaulting to the overworld. */
     private ServerLevel level(JsonObject p) {
         String dimension = p.has("dimension") ? str(p, "dimension") : "minecraft:overworld";
         var world = server.getLevel(ResourceKey.create(Registries.DIMENSION, Identifier.parse(dimension)));
         if (world == null) throw new IllegalArgumentException("Unknown dimension");
         return world;
     }
+    /** Renew the run lease and route one server observation or operation. */
     private JsonElement dispatch(JsonObject request) {
         String method = str(request, "method"); JsonObject p = params(request);
         String run = str(request, "run_id");
+        // Dispatch runs on the server thread, so command helpers share this request's run identity.
         currentRun=run;
         leases.put(run,System.nanoTime());
         if(Set.of("clock.freeze","clock.unfreeze","clock.step","clock.rate","clock.sprint","world.teleport","world.set_block","world.fill","entity.summon","entity.kill","inventory.give").contains(method))return structured(method,p);
@@ -179,6 +206,7 @@ public class ServerBridge implements ModInitializer {
                 for(var ref:refs){var params=ref.getAsJsonObject().deepCopy();if(!params.has("dimension")&&p.has("dimension"))params.add("dimension",p.get("dimension"));if(p.has("products"))params.add("products",p.get("products"));snapshots.add(EvaluationReadback.container(level(params),params));}
                 yield json(Map.of("containers",snapshots,"tick",level(p).getGameTime(),"sample_monotonic_ns",System.nanoTime(),"source","server"));
             }
+            // Sample the requested tiles and containers within this one server-thread dispatch.
             case "observe.evaluation_snapshot" -> {
                 JsonArray regions=new JsonArray(),containers=new JsonArray();long total=0;
                 for(var entry:p.getAsJsonArray("regions")) {
@@ -226,6 +254,7 @@ public class ServerBridge implements ModInitializer {
             }
         };
     }
+    /** Page the running command tree after applying command-policy path filtering. */
     private JsonElement describe(JsonObject p) {
         var dispatcher=server.getCommands().getDispatcher();var root=dispatcher.getRoot();
         if(!p.has("command")) {
@@ -268,6 +297,7 @@ public class ServerBridge implements ModInitializer {
         result.put("permission_source","server command tree");
         return json(result);
     }
+    /** Validate and execute a public command with its explicit context and captured callbacks. */
     private JsonElement command(JsonObject p) {
         String text = CommandPolicy.validate(str(p, "text"),Boolean.getBoolean("minecraft.agent.natural_world"));
         var source = server.createCommandSourceStack();
@@ -290,6 +320,7 @@ public class ServerBridge implements ModInitializer {
         source = source.withCallback((ok, value) -> callbacks.add(Map.of("success", ok, "value", value)));
         var parsed = server.getCommands().getDispatcher().parse(text, source);
         if (parsed.getReader().canRead()) throw new IllegalArgumentException("Brigadier parse failure at " + parsed.getReader().getCursor() + ": " + parsed.getExceptions());
+        // Inspect the parsed clone source region before allowing its blocks to be copied.
         if(CommandPolicy.tokens(text).getFirst().replace("minecraft:","").equals("clone")) {
             var context=parsed.getContext().build(text);var from=source.getLevel();
             if(CommandPolicy.tokens(text).contains("from"))try{from=DimensionArgument.getDimension(context,"sourceDimension");}catch(Exception e){throw new IllegalArgumentException(e);}
@@ -306,8 +337,8 @@ public class ServerBridge implements ModInitializer {
         }
         if(!p.has("keep_conditions")||!p.get("keep_conditions").getAsBoolean())environment.before(currentRun,text);
         server.getCommands().performPrefixedCommand(source, text);
-        // Only vanilla's zero-filled-block result is classified here. A no-op
-        // does not prove the requested postcondition (e.g. replace found no match).
+        // The exact vanilla fill-failure translation key identifies a zero-change fill result.
+        // The requested postcondition still belongs to later state observations.
         var words=CommandPolicy.tokens(text);
         boolean noChange=words.getFirst().replace("minecraft:","").equals("fill")&&!words.contains("destroy")
             &&messageKeys.equals(List.of("commands.fill.failed"));
@@ -315,10 +346,12 @@ public class ServerBridge implements ModInitializer {
             "actual_changes",noChange?0:"unavailable: compare observations","messages", messages,"message_keys",messageKeys,
             "effect",noChange?"no_change":"see_callbacks","postcondition_verified",false));
     }
+    /** Collect translation keys recursively from a command message and its siblings. */
     private static void commandMessageKeys(Component component,List<String> keys){
         if(component.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents translated)keys.add(translated.getKey());
         for(Component child:component.getSiblings())commandMessageKeys(child,keys);
     }
+    /** Translate a structured operation into the shared validated command path. */
     private JsonElement structured(String method,JsonObject p){
         String text=switch(method){
             case "clock.freeze"->"tick freeze";case "clock.unfreeze"->"tick unfreeze";
@@ -337,6 +370,7 @@ public class ServerBridge implements ModInitializer {
         if(p.has("dimension")&&!p.has("context")){JsonObject context=new JsonObject();context.add("dimension",p.get("dimension"));args.add("context",context);}
         return command(args);
     }
+    /** Read loaded block states in a bounded inclusive region. */
     private JsonElement blocks(JsonObject p) {
         ServerLevel world = level(p); JsonArray min = p.getAsJsonArray("min"), max = p.getAsJsonArray("max");
         int x0=min.get(0).getAsInt(), y0=min.get(1).getAsInt(), z0=min.get(2).getAsInt();
@@ -350,7 +384,9 @@ public class ServerBridge implements ModInitializer {
         }
         return json(Map.of("blocks", out, "tick", server.getTickCount(), "source", "server", "dimension", world.dimension().identifier().toString()));
     }
+    /** Read required integer x, y, and z fields as a block position. */
     static BlockPos position(JsonObject p) { return new BlockPos(integer(p,"x"),integer(p,"y"),integer(p,"z")); }
+    /** Read or reset a selected Carpet hopper counter through its installed API. */
     private JsonElement counter(String method, JsonObject p) {
         String color = str(p,"color");
         if (!Set.of("white","orange","magenta","light_blue","yellow","lime","pink","gray","light_gray","cyan","purple","blue","brown","green","red","black").contains(color)) throw new IllegalArgumentException("Invalid wool color");
@@ -374,6 +410,7 @@ public class ServerBridge implements ModInitializer {
             return json(data);
         } catch (ReflectiveOperationException e) { throw new IllegalStateException("Carpet API mismatch",e); }
     }
+    /** Dispatch spawn, status, equipment, inventory, operation, or removal for a run-owned fake player. */
     private JsonElement fake(String operation, JsonObject p, String run) {
         String name = str(p,"id");
         if (!name.matches("[A-Za-z0-9_]{1,16}")) throw new IllegalArgumentException("Invalid player name");
@@ -384,6 +421,7 @@ public class ServerBridge implements ModInitializer {
             if (p.has("x")) cmd += " at " + p.get("x").getAsDouble() + " " + p.get("y").getAsDouble() + " " + p.get("z").getAsDouble()+" facing "+(p.has("yaw")?p.get("yaw").getAsFloat():0)+" "+(p.has("pitch")?p.get("pitch").getAsFloat():0)+" in "+level(p).dimension().identifier();
             try{raw(cmd);}catch(Exception e){retiringFakes.add(name);throw e;}
         } else {
+            // Completed-owner receipts allow repeated cleanup/status calls after the player has disappeared.
             if (!run.equals(fakeOwners.get(name))) {
                 if(fakeOwners.get(name)==null&&run.equals(completedFakeOwners.get(name))&&server.getPlayerList().getPlayerByName(name)==null&&!isSpawning(name)&&Set.of("stop","remove","status").contains(operation))
                     return json(Map.of("id",name,"status","already_removed","connected",false,"alive",false,"cleanup_confirmed",true));
@@ -401,6 +439,7 @@ public class ServerBridge implements ModInitializer {
                 case "equip" -> {
                     JsonObject payload=new JsonObject();payload.addProperty("id",str(p,"item"));payload.addProperty("count",1);payload.add("components",p.getAsJsonObject("components"));
                     var stack=net.minecraft.world.item.ItemStack.CODEC.parse(server.registryAccess().createSerializationContext(com.mojang.serialization.JsonOps.INSTANCE),payload).getOrThrow();
+                    // Decode the requested stack with the running registry, then inspect its survival equipment state.
                     var validity=new SurvivalEquipment();validity.inspect(stack,"mainhand");
                     if(!validity.report().get("passed").equals(true))throw new SecurityException("Equipment violates survival constraints: "+validity.report().get("violations"));
                     server.getPlayerList().getPlayerByName(name).setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,stack);
@@ -469,7 +508,9 @@ public class ServerBridge implements ModInitializer {
         }
         return json(Map.of("id",name,"operation",operation,"status",isFake(name)?"ready":isSpawning(name)?"spawning":"not_online","tick",server.getTickCount()));
     }
+    /** Check whether the named online player is a Carpet fake player. */
     private boolean isFake(String name){var player=server.getPlayerList().getPlayerByName(name);return player!=null&&player.getClass().getName().equals("carpet.patches.EntityPlayerMPFake");}
+    /** Read loaded coverage, body clearance, support, and feet fluid at an actor site. */
     private JsonElement afkSite(JsonObject p) {
         var world=level(p);var point=p.getAsJsonArray("position");double x=point.get(0).getAsDouble(),y=point.get(1).getAsDouble(),z=point.get(2).getAsDouble();
         var min=BlockPos.containing(x-.3,y-.06,z-.3);var max=BlockPos.containing(x+.3,y+1.8,z+.3);
@@ -480,7 +521,9 @@ public class ServerBridge implements ModInitializer {
         for(var shape:world.getBlockCollisions(null,body.move(0,-.06,0)))if(!shape.isEmpty())support=true;
         return json(Map.of("loaded",true,"position",List.of(x,y,z),"dimension",world.dimension().identifier().toString(),"body_clear",clear,"has_support",support,"fluid_at_feet",!world.getFluidState(BlockPos.containing(x,y,z)).isEmpty(),"tick",world.getGameTime()));
     }
+    /** Read the installed Carpet API's pending-spawn state for a player name. */
     private boolean isSpawning(String name){try{return (boolean)Class.forName("carpet.patches.EntityPlayerMPFake").getMethod("isSpawningPlayer",String.class).invoke(null,name);}catch(ReflectiveOperationException e){throw new IllegalStateException("Carpet fake API unavailable",e);}}
+    /** Read world gamerules, time, weather, player effects, and server tick settings. */
     private JsonElement conditions(){
         List<Object> worlds=new ArrayList<>();
         for(var level:server.getAllLevels()) {
@@ -490,5 +533,6 @@ public class ServerBridge implements ModInitializer {
         }
         return json(Map.of("worlds",worlds,"players",server.getPlayerList().getPlayers().stream().map(player->Map.of("id",player.getPlainTextName(),"effects",player.getActiveEffects().stream().map(Object::toString).toList())).toList(),"clock",Map.of("game_tick",server.overworld().getGameTime(),"server_tick",server.getTickCount(),"frozen",server.tickRateManager().isFrozen(),"target_tps",server.tickRateManager().tickrate(),"sprinting",server.tickRateManager().isSprinting()),"source","server"));
     }
+    /** Retain the latest thirty-two cleanup error descriptions. */
     private void cleanupFailure(Exception error){if(cleanupFailures.size()==32)cleanupFailures.removeFirst();cleanupFailures.add(error.toString());}
 }

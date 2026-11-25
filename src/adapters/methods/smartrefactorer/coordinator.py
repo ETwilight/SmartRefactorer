@@ -1,4 +1,4 @@
-"""Public host lifecycle choices; algorithm phase transitions belong to Controller."""
+"""Choose development, skill execution, maintenance, or a public task-lifecycle request."""
 
 import copy
 import json
@@ -12,16 +12,32 @@ from .model import json_value
 
 
 class HostCoordinator:
-    """Translate lifecycle decisions to one algorithm controller and one executor.
+    """Turn a run decision into a call to the SR controller or execution bridge.
 
-    It supplies public task data and actual receipts. It does not implement a
-    second Develop/repair/maintenance state machine or infer task completion.
+    adapter supplies the Controller, ExecutionBridge, OperatorClient, recorder, and
+    checkpoint directory. decide(context) first continues saved maintenance or live
+    execution. A changed task binding starts a new AlgorithmState. Otherwise the
+    coordinator model chooses the next operation from the current public context.
+
+    A development choice advances the controller and starts its checked task entry.
+    Invocation-binding problems return to Propose; development errors go to Reflect.
+
+    Example, using the coordinator created by MethodAdapter.bind()::
+
+        decision = adapter.coordinator.decide(context)
+
+    The runner turns decision into requests; the adapter then yields public calls
+    or drives the invocation selected by that decision.
     """
 
     def __init__(self, adapter):
+        """Keep the bound method adapter used to carry out run decisions."""
+
         self.adapter = adapter
 
     def decide(self, context):
+        """Continue saved work or select and start the next task operation."""
+
         adapter = self.adapter
         controller = adapter.controller
         state = controller.state
@@ -40,6 +56,8 @@ class HostCoordinator:
             atomic(
                 adapter.store / ('task-' + digest(state.task_binding) + '.json'), controller.s
             )
+            # A task switch creates a new AlgorithmState; refresh the local state reference
+            # below.
             controller.activate_task(binding, CONTEXT_PROFILE)
             state = controller.state
             adapter.persist()
@@ -59,8 +77,8 @@ class HostCoordinator:
                 'Component implementation blocked; retain exact delivery evidence and edit cursor',
             )
         session = controller.s.get('operator_session') or {}
-        # A durable host choice survives interruption. Older checkpoints expose
-        # the same fact through an unfinished operator in a development phase.
+        # A saved development choice continues from its operator session and phase.
+
         unfinished = (
             session and 'result' not in session and state.phase not in (Phase.IDLE, Phase.READY)
         )
@@ -86,6 +104,8 @@ class HostCoordinator:
             )
         if decision['decision'] == 'execute':
             try:
+                # choice: dict decoded from the JSON string naming a component and its
+                # arguments.
                 choice = json_value(decision['request_json'])
                 execution.start_program(
                     choice['component_id'],
@@ -107,6 +127,7 @@ class HostCoordinator:
         controller.s['development_in_progress'] = True
         adapter.persist()
         try:
+            # outcome: StageResult, carrying the phase and readiness or blocked status.
             outcome = controller.prepare_development(adapter.public(context))
             if not outcome.ready_to_execute:
                 if outcome.blocked:
@@ -149,6 +170,8 @@ class HostCoordinator:
             }
 
     def maintain(self, context):
+        """Advance library maintenance, recording development errors and saving its state."""
+
         adapter = self.adapter
         try:
             finished = adapter.controller.maintain()

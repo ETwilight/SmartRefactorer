@@ -1,6 +1,8 @@
-"""Explicit SmartRefactorer continuation from complete, clean stopped evidence.
+"""Load a stopped SR run and restore its runner history and cumulative usage.
 
-No environment calls, model calls, source mutation, or guessed world recovery.
+The source report identifies its development checkpoint, embedding cache, and
+library manifest. The event ledger supplies completed model and environment
+calls. The returned state carries those records into the continuing run.
 """
 
 import copy
@@ -15,6 +17,9 @@ from runtime.feedback_semantics import is_uncertain
 
 
 def load_continuation(source, *, readonly=None):
+    """Read and cross-check the source run, then return its runner continuation state."""
+    # source: str | Path -> absolute Path of the source run.
+
     source = Path(source).resolve()
     raw = (source / 'report.json').read_bytes()
     report = json.loads(raw)
@@ -108,6 +113,7 @@ def load_continuation(source, *, readonly=None):
         for line in stream:
             if not line.endswith(b'\n'):
                 raise ValueError('Incomplete stopped event ledger')
+            # line is bytes from the ledger; event is the decoded dictionary.
             event = json.loads(line)
             kind = event.get('kind')
             call = event.get('call') or {}
@@ -134,8 +140,9 @@ def load_continuation(source, *, readonly=None):
             and feedback.get('error', {}).get('type') == 'ValueError'
         )
         if malformed_not_started:
-            # The public gateway's malformed-envelope rejection has no valid
-            # RPC identity. Keep it verbatim and never add it to replay work.
+            # This malformed-envelope receipt was produced before a valid RPC identity was
+            # assigned.
+
             unresolved = is_uncertain(feedback)
         else:
             unresolved = is_uncertain(feedback, request=request)
@@ -161,6 +168,8 @@ def load_continuation(source, *, readonly=None):
                 continue
             contents = message.get('content', [])
             if isinstance(contents, str):
+                # contents: str -> list[dict[str, str]], matching the content-part form used
+                # below.
                 contents = [{'text': contents}]
             for part in contents:
                 if not isinstance(part, dict) or not isinstance(part.get('text'), str):
@@ -193,8 +202,9 @@ def load_continuation(source, *, readonly=None):
             }
             for cid in step.get('calls', []):
                 call = call_map[cid]
-                # The newest paid decision's results have not appeared in another
-                # provider input. Selected views must be retained explicitly.
+                # Keep the selected feedback view when it has not yet appeared in a recorded
+                # model input.
+
                 feedback = call.get('response_view')
                 if feedback is None:
                     options = call['request'].get('response') or {}
@@ -229,11 +239,13 @@ def load_continuation(source, *, readonly=None):
         step = last['steps'][-1]
         if step['decision']['decision'] == 'request' and not step.get('stop_reason'):
             planned = json.loads(step['decision']['request_json'])
+            # planned: dict | list[dict] -> list[dict] of requested operations.
             planned = [planned] if isinstance(planned, dict) else planned
             completed = len(step.get('calls', []))
             if completed < len(planned):
                 pending = copy.deepcopy(planned[completed:])
-    pending = []  # Method programs resume their durable cursor, never a runner batch prefix.
+    # Execution continuation is loaded from method state; pending runner requests start empty.
+    pending = []
     unstarted = None
     if expected:
         method_pending = json.loads(development.read_text(encoding='utf-8')).get('pending')
@@ -260,6 +272,10 @@ def load_continuation(source, *, readonly=None):
 
 
 def restore_recorder(recorder, state):
+    """Restore carried model calls, environment calls, task binding, timing, and token
+    totals.
+    """
+
     recorder.verified_unstarted_method_request = copy.deepcopy(
         state.get('verified_unstarted_method_request')
     )
@@ -307,6 +323,8 @@ def restore_recorder(recorder, state):
 
 
 def copy_context_sources(source, destination):
+    """Copy content-addressed context files to the new run and return their count."""
+
     source = Path(source) / 'method/artifacts/context'
     destination = Path(destination) / 'method/artifacts/context'
     if not source.is_dir():
@@ -327,7 +345,24 @@ def copy_context_sources(source, destination):
 
 
 class ContinuationService:
-    """Inject this method's verified continuation contract into the generic host."""
+    """Continuation callbacks used by the SR task runner.
+
+    load_continuation reads the stopped report and method files. restore_recorder
+    loads its carried usage, round, and task records. copy_context_sources brings
+    saved provider-input files into the new run. save_runner_checkpoint writes the
+    recent decision history and working memory using the shared runner schema.
+
+    The adapter separately saves SR's candidate, operator sessions, and library in
+    its method-state directory.
+
+    Example, after selecting a continuation source::
+
+        service = ContinuationService()
+        saved = service.load_continuation(source, readonly=environment.readonly)
+        service.restore_recorder(recorder, saved)
+
+    The recorder now includes the source run's completed calls and cumulative usage.
+    """
 
     load_continuation = staticmethod(load_continuation)
     restore_recorder = staticmethod(restore_recorder)
@@ -335,7 +370,9 @@ class ContinuationService:
 
     @staticmethod
     def save_runner_checkpoint(folder, context, recorder, memory):
-        # Retain the established on-disk schema/name for historical resume.
+        """Save recent runner decisions, working memory, and charged tokens for continuation."""
+        # The runner history file uses the shared baseline.continuation.v1 schema.
+
         from audit.recorder import save_json
 
         save_json(

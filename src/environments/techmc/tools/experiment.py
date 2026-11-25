@@ -1,4 +1,4 @@
-"""Run one independent experiment with admission, ownership and guaranteed cleanup attempts."""
+"""Launch managed experiments or inspect and prune retained worlds."""
 
 from pathlib import Path as _ToolPath
 import sys as _ToolSys
@@ -17,6 +17,8 @@ from environments.techmc.task_selection import add_selection_arguments, selectio
 
 
 def main():
+    """Dispatch the experiment command or world-retention operation for the selected host."""
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['run', 'worlds', 'prune'])
     parser.add_argument('--port', type=int, default=18776)
@@ -28,10 +30,11 @@ def main():
     parser.add_argument('--include-failed', action='store_true')
     parser.add_argument('--cwd', type=Path)
     add_selection_arguments(parser)
-    # The separator keeps runner flags separate from host policy.
+    # Arguments after -- belong to the runner launched inside the managed experiment.
     values = sys.argv[1:]
     separator = values.index('--') if '--' in values else len(values)
     args = parser.parse_args(values[:separator])
+    # command: list[str] passed to Experiment.run as the child process arguments.
     command = values[separator + 1 :]
     if args.action == 'run':
         if not command:

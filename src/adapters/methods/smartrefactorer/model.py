@@ -1,7 +1,8 @@
-"""Shared model calls, operator continuations and protocol-output validation.
+"""Call the coordinator and development models and decode their returned records.
 
-This adapter owns provider/format errors and exact tool-result delivery. It does
-not choose algorithm phases or reinterpret native feedback as task success.
+Operator sessions keep tool reads, reusable results, and the latest completed
+answer in the controller checkpoint. Evidence reads and public knowledge queries
+are added to that history before another model turn is requested.
 """
 
 import copy
@@ -24,22 +25,48 @@ RECORD_FORMATS = FormatChecker()
 
 @RECORD_FORMATS.checks('python-source', raises=(SyntaxError, ValueError, TypeError))
 def valid_python_source(source):
+    """Compile source used by the python-source schema format and return True."""
+
     compile(source, '<operator-check>', 'exec')
     return True
 
 
 def json_value(text):
+    """Parse JSON text, raising ValueError for explicit NaN or infinity tokens."""
 
     def invalid(value):
+        """Report the non-finite token encountered by the JSON parser."""
+
         raise ValueError('Non-finite JSON number: ' + value)
 
     return json.loads(text, parse_constant=invalid)
 
 
 class OperatorClient:
-    """One metered transport for coordinator and serial development operators."""
+    """Model calls and tool-read sessions for the coordinator and SR operators.
+
+    recorder collects model usage and request metadata. environment supplies public
+    knowledge reads, evidence is the EvidenceCatalog, and persist saves the linked
+    controller checkpoint. controller starts as None and is attached by the adapter.
+    requests holds the metadata returned by completed model calls.
+
+    coordinate() returns a lifecycle decision and its model metadata. ask() serves
+    source, context, and knowledge reads until the operator returns its record.
+    The operator session keeps history and a cache mapping read hashes to history
+    positions. Completed answers are decoded and checked before being returned.
+
+    Example, with the client created by MethodAdapter.bind()::
+
+        client = adapter.model
+        record = client.ask('Plan', instructions, data)
+
+    record is the parsed Plan object. The algorithm checks its requirement choices
+    before saving it as the reuse plan.
+    """
 
     def __init__(self, recorder, environment, evidence, save):
+        """Keep the model-call recorder, environment, evidence catalog, and save callback."""
+
         self.recorder = recorder
         self.environment = environment
         self.evidence = evidence
@@ -48,15 +75,21 @@ class OperatorClient:
         self.requests = []
 
     def guard(self):
+        """Call the recorder's configured run-limit check."""
+
         if self.recorder.model_guard:
             self.recorder.model_guard()
 
     def sync_evidence(self):
+        """Refresh the request and development-history evidence indexes."""
+
         self.evidence.sync_evidence()
 
     def coordinate(self, instructions, data, schema):
-        # Public observations and complete program returns can contain entire
-        # regions. Index unrequested evidence; retain explicit reads in full.
+        """Return a coordinator decision after serving any requested evidence reads."""
+        # Store large observations and program results as addressable evidence before building
+        # the prompt.
+
         key = digest(
             {
                 'instructions': instructions,
@@ -172,7 +205,9 @@ class OperatorClient:
             self.persist()
 
     def ask(self, role, instructions, data):
-        """Deliver all valid reads in full, preserve the operator cursor, and meter every actual model turn."""
+        """Continue an operator session until it returns a checked record or component
+        delivery.
+        """
         self.persist()
         self.sync_evidence()
         methods = sorted(self.environment.knowledge_methods()) if self.environment else []
@@ -327,10 +362,17 @@ class OperatorClient:
                     'retry_instruction': '',
                 }
                 self.controller.s['operator_session'] = session
+        # history: list[dict], shared with the saved session while reads and answers are
+        # appended.
         history = session['history']
+        # cache: dict[str, int], mapping normalized read-request hashes to positions in history.
         cache = session['cache']
 
         def cached_entry(index):
+            """Follow cached history references to the entry containing the complete
+            feedback.
+            """
+
             seen = set()
             while True:
                 if type(index) is not int or not 0 <= index < len(history) or index in seen:
@@ -350,10 +392,14 @@ class OperatorClient:
                 index = feedback.get('source_tool_history_index')
 
         def tool_key(output):
+            """Hash a tool request after decoding its JSON parameter fields."""
+
             normalized = copy.deepcopy(output)
             for field in ('params_json', 'request_json'):
                 if field in normalized:
                     try:
+                        # The key-only copy changes params_json/request_json from str to the
+                        # decoded JSON value.
                         normalized[field] = json_value(normalized[field])
                     except (ValueError, TypeError):
                         pass
@@ -401,15 +447,21 @@ class OperatorClient:
                 )
 
         def append_history(entry):
+            """Append one request/feedback entry and save the operator session."""
+
             history.append(entry)
             self.persist()
 
         def delivered(value):
+            """Save the completed operator record and return it."""
+
             session['result'] = copy.deepcopy(value)
             self.persist()
             return value
 
         def record_contract(value):
+            """Check the record against the schema supplied for this operator call."""
+
             specification = data.get('operator_record_schema')
             if specification:
                 try:
@@ -446,6 +498,8 @@ class OperatorClient:
                 return copy.deepcopy(session['result'])
 
         def component_binding(record):
+            """Match the delivered component ID and source hash to the assigned edit."""
+
             edit = data.get('edit') or {}
             component = data.get('component') or {}
             target = edit.get('target') or component.get('id')
@@ -547,6 +601,8 @@ class OperatorClient:
                     session['retry_instruction'] = retry_instruction
                     self.persist()
             self.requests.append(meta)
+            # output: wrapped model response -> the tool decision or final-answer dictionary
+            # inside turn.
             output = output['turn']
             if output['decision'] == 'component_blocked':
                 try:
@@ -601,6 +657,8 @@ class OperatorClient:
                     continue
             if output['decision'] == 'write_component':
                 try:
+                    # The interface and contract arrive as JSON strings; the object checks below
+                    # narrow them to dict.
                     interface = json_value(output['interface_json'])
                     contract = json_value(output['contract_json'])
                     if not isinstance(interface, dict) or not isinstance(contract, dict):
@@ -657,6 +715,8 @@ class OperatorClient:
                     continue
             if output['decision'] == 'respond':
                 try:
+                    # value: decoded JSON, narrowed to dict before it is accepted as an operator
+                    # record.
                     value = json_value(output['record_json'])
                     if not isinstance(value, dict):
                         raise ValueError('Operator record must be an object')
@@ -841,6 +901,8 @@ class OperatorClient:
                     continue
 
                 def invoke(req):
+                    """Return the environment's stored receipt or its immediate response."""
+
                     result = self.environment.handle(req)
                     return (
                         self.environment.raw_feedback(req['request_id'], request=req) or result
@@ -870,7 +932,7 @@ class OperatorClient:
             append_history(entry)
 
     def output_blocked(self, exc):
-        """Pause malformed operator output without sending a fake code failure to Reflect."""
+        """Save the rejected output and stop with the current operator checkpoint."""
         self.controller.s['output_failure'] = {
             'type': type(exc).__name__,
             'message': str(exc),

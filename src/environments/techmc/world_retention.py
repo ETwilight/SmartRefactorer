@@ -1,4 +1,4 @@
-"""Explicit retention inventory. Pruning never deletes active or unconfirmed worlds."""
+"""Inventory retained server instances and prune an explicitly selected instance."""
 
 import json
 from pathlib import Path
@@ -12,6 +12,8 @@ else:
 
 
 def inventory(root):
+    """List instance identities, retained paths, byte sizes, and experiment status."""
+
     root = Path(root)
     result = []
     for path in (root / 'runtime/servers').glob('*/instances/*/instance.json'):
@@ -50,6 +52,14 @@ def inventory(root):
 
 
 def prune(root, instance_id, commit=False, include_failed=False):
+    """Preview or delete one stopped retained instance while holding the host lease.
+
+    commit=False returns the selected inventory entry with a would_delete action.
+    commit=True removes the directory and writes deletion receipts. Failed runs
+    require include_failed=True; host activity and instance state are checked
+    before deletion.
+    """
+
     identifier(instance_id)
     root = Path(root).resolve()
     with HostLease(root):

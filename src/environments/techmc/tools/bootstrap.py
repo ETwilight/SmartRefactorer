@@ -1,4 +1,4 @@
-"""Reproducible acquisition. Never starts Minecraft or accepts its EULA."""
+"""Acquire and index the Minecraft, Fabric, JDK, and offline Wiki dependencies."""
 
 from __future__ import annotations
 from pathlib import Path as _ToolPath
@@ -20,19 +20,23 @@ import urllib.request
 import urllib.parse
 import zipfile
 
-ROOT = Path(__file__).resolve().parents[3] / "assets/techmc"
+from environments.techmc.paths import DATA_ROOT as ROOT
+
 MC = ROOT / 'knowledge/minecraft/26.1'
 UA = 'CS269-MinecraftResearch/0.1 (local reproducible acquisition)'
 
 
 def write_json(path, value):
+    """Serialize once, then replace the destination with the completed temporary file."""
+    # Normalize a str or Path before deriving temporary and receipt paths.
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + '.' + str(uuid.uuid4()) + '.tmp')
     payload = json.dumps(value, ensure_ascii=False, indent=2)
     tmp.write_text(payload, encoding='utf-8')
-    # Publish the same completed bytes after a transient Windows reader/scanner
-    # lock. Never rerun a lifecycle operation or rewrite/serialize on retry.
+    # A Windows reader or scanner may briefly hold the destination open.
+    # Retry the final replace with the same serialized bytes.
     for attempt in range(9):
         try:
             tmp.replace(path)
@@ -44,6 +48,8 @@ def write_json(path, value):
 
 
 def digest(path, algorithm='sha256'):
+    """Hash a file in 4 MiB chunks using the selected digest algorithm."""
+
     h = hashlib.new(algorithm)
     with Path(path).open('rb') as f:
         for data in iter(lambda: f.read(4 * 1024 * 1024), b''):
@@ -52,6 +58,8 @@ def digest(path, algorithm='sha256'):
 
 
 def fetch_json(url):
+    """Read a JSON response with the project acquisition user agent."""
+
     with urllib.request.urlopen(
         urllib.request.Request(url, headers={'User-Agent': UA}), timeout=90
     ) as r:
@@ -59,7 +67,13 @@ def fetch_json(url):
 
 
 def download(url, path, expected=None, algorithm='sha256', size=None, quiet=False):
-    """Atomic verified downloads; resume only against matching strong ETag/Last-Modified."""
+    """Reuse a verified file or download through a resumable temporary file.
+
+    A saved HTTP validator binds a partial file to its origin. A matching range
+    response appends bytes; a full response restarts the file. Expected size and
+    digest are checked before publishing the completed path and provenance.
+    """
+    # Normalize a str or Path before deriving temporary and receipt paths.
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
@@ -97,6 +111,8 @@ def download(url, path, expected=None, algorithm='sha256', size=None, quiet=Fals
                     if not content_range.startswith(f'bytes {offset}-'):
                         raise ValueError('Invalid Content-Range')
                     total = int(content_range.split('/')[-1])
+                    # A matching 206 response extends the saved prefix; a 200 response restarts
+                    # it.
                     mode = 'ab'
                 else:
                     if r.status != 200:
@@ -107,6 +123,8 @@ def download(url, path, expected=None, algorithm='sha256', size=None, quiet=Fals
                         if r.headers.get('Content-Length')
                         else size
                     )
+                # validator: str | None; weak ETags fall back to Last-Modified for range
+                # resumes.
                 validator = r.headers.get('ETag') or r.headers.get('Last-Modified')
                 if validator and validator.startswith('W/'):
                     validator = r.headers.get('Last-Modified')
@@ -146,6 +164,8 @@ def download(url, path, expected=None, algorithm='sha256', size=None, quiet=Fals
 
 
 def extract_safe(archive, destination):
+    """Check ZIP destinations and link entries, then extract beneath the destination."""
+
     destination = Path(destination).resolve()
     with zipfile.ZipFile(archive) as z:
         for info in z.infolist():
@@ -159,6 +179,8 @@ def extract_safe(archive, destination):
 
 
 def minecraft():
+    """Acquire pinned version metadata, game JARs, libraries, and the decompiler."""
+
     manifest = fetch_json('https://piston-meta.mojang.com/mc/game/version_manifest_v2.json')
     entry = next(v for v in manifest['versions'] if v['id'] == '26.1')
     write_json(MC / 'metadata/version_manifest_v2.json', manifest)
@@ -194,6 +216,8 @@ def minecraft():
             ('META-INF/libraries.list', 'libraries/server'),
         ]:
             for line in z.read(listing).decode().splitlines():
+                # Bundled listing rows contain the SHA-256, artifact name, and relative archive
+                # path.
                 sha, name, path = line.split('\t')
                 target = (MC / folder / path).resolve()
                 if not target.is_relative_to((MC / folder).resolve()):
@@ -216,12 +240,16 @@ def minecraft():
 
 
 def wiki():
+    """Acquire the offline Wiki archive through the range downloader."""
+
     from environments.techmc.tools.download_zim import main
 
     main()
 
 
 def jdk():
+    """Install the saved or selected Windows JDK release and record its executable."""
+
     saved = ROOT / 'runtime/java.json'
     releases = (
         [json.loads(saved.read_text())['release']]
@@ -240,8 +268,11 @@ def jdk():
 
 
 def mods():
+    """Acquire release mods declaring 26.1 support and retain their version metadata."""
+
     entries = []
     lock = ROOT / 'runtime/mods.candidate-lock.json'
+    # existing: dict[str, dict] of previously selected mods, keyed by project slug.
     existing = (
         {m['project']: m for m in json.loads(lock.read_text())['mods']} if lock.exists() else {}
     )
@@ -259,10 +290,10 @@ def mods():
         ]
         if not versions:
             raise ValueError(f'No exact 26.1 release found for {slug}')
-        # Prefer files built explicitly for 26.1; keep multi-version candidates only
-        # when no exact build exists, and never label them launch-validated.
-        # Select a coherent release generation. Later filenames may say 26.1.2
-        # while publisher game_versions and embedded ranges explicitly include 26.1.
+        # Publisher game_versions controls the 26.1 match; filenames can name a later patch.
+
+        # Use the first matching release and its primary file, retaining the selected metadata.
+
         v = versions[0]
         f = next((f for f in v['files'] if f.get('primary')), v['files'][0])
         path = download(
@@ -308,6 +339,8 @@ def mods():
 
 
 def decompile(side):
+    """Decompile one installed game JAR and summarize generated sources and failures."""
+
     java_config = ROOT / 'runtime/java.json'
     java = json.loads(java_config.read_text())['java'] if java_config.exists() else 'java'
     jar = (
@@ -329,7 +362,7 @@ def decompile(side):
         '--thread-count=4',
         '--skip-extra-files=1',
     ]
-    # Argument file avoids Windows' command-line length limit.
+    # The dependency list goes in an argument file to fit Windows command-line limits.
     args = [f'-e={p.as_posix()}' for p in deps] + [jar.as_posix(), output.as_posix()]
     argfile = MC / 'logs' / (side + '.args')
     argfile.write_text(

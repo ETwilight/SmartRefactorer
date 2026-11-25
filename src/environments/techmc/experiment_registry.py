@@ -1,4 +1,4 @@
-"""Per-port ownership, serialized admission and configurable host concurrency."""
+"""Track experiment credentials, server reservations, host/port locks, and owner heartbeats."""
 
 import hashlib
 import json
@@ -16,6 +16,10 @@ else:
 
 
 def write(path, value):
+    """Write JSON through a temporary file and retry destination replacement while a
+    transient permission lock persists.
+    """
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + '.' + str(uuid.uuid4()) + '.tmp')
@@ -32,16 +36,24 @@ def write(path, value):
 
 
 def identifier(value):
+    """Validate and return an experiment or instance identifier used in storage paths."""
+
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', value):
         raise ValueError('Invalid experiment ID')
     return value
 
 
 def directory(root, experiment_id):
+    """Return the experiment's directory under the configured TechMC runtime root."""
+
     return Path(root) / 'runtime/experiments' / identifier(experiment_id)
 
 
 def credentials(root, experiment_id, token=None):
+    """Load or create the experiment owner token and return its path and SHA-256 identity
+    hash.
+    """
+
     path = directory(root, experiment_id) / 'owner.token'
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
@@ -58,6 +70,8 @@ def credentials(root, experiment_id, token=None):
 
 
 def authenticate(state, token):
+    """Compare a recorded owner hash with the supplied token when that hash is present."""
+
     if state.get('owner_hash') and (
         not token
         or not secrets.compare_digest(
@@ -70,7 +84,9 @@ def authenticate(state, token):
 
 
 def process_alive(pid):
-    """OS verification; permission failures never mean that a process is dead."""
+    """Check a positive integer PID through the operating system, propagating errors that
+    prevent verification.
+    """
     if type(pid) is not int or pid <= 0:
         raise ValueError('Missing recorded process identity')
     if os.name == 'nt':
@@ -86,7 +102,7 @@ def process_alive(pid):
         if not handle:
             error = ctypes.get_last_error()
             if error == 87:
-                return False  # invalid PID, not access denied
+                return False  # ERROR_INVALID_PARAMETER identifies an invalid process ID.
             raise OSError(error, 'Cannot verify recorded process termination')
         try:
             code = wintypes.DWORD()
@@ -103,18 +119,42 @@ def process_alive(pid):
 
 
 class HostLease:
+    """Hold an operating-system file lock for host admission or one server port.
+
+    root is the TechMC data Path. port is None for runtime/host.lock or a port
+    selecting runtime/host-port-<port>.lock. timeout bounds lock-acquisition
+    retries; zero makes one immediate attempt. stream is None before entry and
+    after exit, and an open binary file while the lock is held.
+
+    __enter__ acquires the byte/file lock and returns this lease. __exit__
+    unlocks and closes its stream. Windows uses a one-byte msvcrt lock; POSIX
+    uses flock on the opened file.
+
+    Example:
+        with HostLease(root, timeout=5):
+            check_existing(root, port, max_servers=host_policy(root))
+
+    The host admission check runs while this process holds the shared host
+    lock, then the context releases it.
+    """
+
     def __init__(self, root, port=None, timeout=0):
+        """Select the host/port lock scope and acquisition timeout with no open lock stream."""
+
         self.root = Path(root)
         self.port = port
         self.timeout = timeout
         self.stream = None
 
     def __enter__(self):
+        """Open and acquire the selected lock, polling within the configured timeout."""
+
         name = (
             'host.lock' if self.port is None else 'host-port-' + str(int(self.port)) + '.lock'
         )
         path = self.root / 'runtime' / name
         path.parent.mkdir(parents=True, exist_ok=True)
+        # stream changes from None to the binary file that holds this operating-system lock.
         self.stream = path.open('a+b')
         self.stream.seek(0)
         deadline = time.monotonic() + self.timeout
@@ -145,6 +185,8 @@ class HostLease:
         return self
 
     def __exit__(self, *args):
+        """Unlock the file and close its stream."""
+
         if self.stream:
             if os.name == 'nt':
                 import msvcrt
@@ -160,6 +202,8 @@ class HostLease:
 
 
 def host_policy(root):
+    """Return the configured server-count cap; zero selects resource-limited scheduling."""
+
     path = Path(root) / 'runtime/host-policy.json'
     value = json.loads(path.read_text()) if path.exists() else {'max_servers': 0}
     maximum = value.get('max_servers', 0)
@@ -169,8 +213,11 @@ def host_policy(root):
 
 
 def allocations(root, exclude_port=None):
-    """Include admitted-but-not-yet-started JVMs so concurrent starts cannot overbook."""
+    """Collect per-port reservations and active-server allocations, including admitted
+    launches without a PID.
+    """
     root = Path(root)
+    # result: dict[int, dict], merging reservations and active server records by bridge port.
     result = {}
     for path in (root / 'runtime/reservations').glob('*.json'):
         value = json.loads(path.read_text())
@@ -212,7 +259,9 @@ def allocations(root, exclude_port=None):
 
 
 def _known_capacity_allocation(root, value):
-    """Separate explicit live reservations from stale or damaged metadata."""
+    """Recognize an allocation through a live supervisor or its managed starting/active
+    server metadata.
+    """
     pid = value.get('supervisor_pid')
     if pid is not None:
         return (
@@ -234,7 +283,9 @@ def _known_capacity_allocation(root, value):
 
 
 def check_existing(root, port, resume=False, max_servers=1, experiment_id=None):
-    """Never treat an orphaned JVM, stale supervisor lock or failed cleanup as free."""
+    """Check the requested port and host concurrency against server state, supervisors,
+    reservations, and whole-run leases.
+    """
     owner_path = Path(root) / 'runtime/task-world-owners' / (str(int(port)) + '.json')
     if owner_path.exists():
         owner = json.loads(owner_path.read_text(encoding='utf-8'))
@@ -293,9 +344,11 @@ def check_existing(root, port, resume=False, max_servers=1, experiment_id=None):
         if all(_known_capacity_allocation(root, v) for v in current if v['port'] == int(port)):
             raise CapacityUnavailable('Host busy: port is already admitted')
         raise RuntimeError('Port reservation is stale or its supervisor identity is uncertain')
-    # A run reserves its slot even while all its task worlds are stopped. Count
-    # physical allocations and whole-run leases once per port, never once per
-    # receipt. The requesting owner's own slot is reused, not allocated twice.
+    # Count physical server allocations and whole-run leases by distinct port.
+    # A whole-run lease retains its port during stopped gaps between task visits.
+    # The requesting owner reuses its matching whole-run port lease.
+    # occupied_ports: set[int], counting each server slot once across its allocation and
+    # retained-run lease.
     occupied_ports = {int(value['port']) for value in current}
     for path in (Path(root) / 'runtime/task-world-owners').glob('*.json'):
         owner = json.loads(path.read_text(encoding='utf-8'))
@@ -317,10 +370,8 @@ def check_existing(root, port, resume=False, max_servers=1, experiment_id=None):
 
 
 def task_world_lease(root, port, experiment_id, token, release=False):
-    """Whole-run reservation survives stopped gaps; never discard crash remnants.
-
-    Caller serializes admission with HostLease(root). Release is explicit and
-    authenticated, and requires that this experiment has no live supervisor.
+    """Create, reuse, or release the owner's whole-run port reservation under the caller's
+    host lock.
     """
     identifier(experiment_id)
     path = Path(root) / 'runtime/task-world-owners' / (str(int(port)) + '.json')
@@ -371,7 +422,9 @@ def task_world_lease(root, port, experiment_id, token, release=False):
 
 
 def retained_instance(root, port, instance_id, experiment_id, token):
-    """Validate an explicit stopped world without rewriting its historical receipt."""
+    """Load an owned retained-instance receipt and check its stopped/saved state and
+    world-directory binding.
+    """
     identifier(instance_id)
     original_base = Path(root) / 'runtime/servers' / str(int(port)) / 'instances'
     if any(
@@ -413,11 +466,8 @@ def retained_instance(root, port, instance_id, experiment_id, token):
 
 
 def retained_resume_target(root, port, instance_id, experiment_id, token):
-    """Prove one owned saved world independently of the port's latest occupant.
-
-    This is eligibility, not slot admission. The caller must still acquire the
-    host/port leases and run check_existing before any launch. No current.json
-    or other experiment's owner token is consulted or changed here.
+    """Check the retained world's exact owner hash and verify its recorded process and
+    supervisor have exited.
     """
     value = retained_instance(root, port, instance_id, experiment_id, token)
     owner = hashlib.sha256(token.strip().encode()).hexdigest()
@@ -432,7 +482,9 @@ def retained_resume_target(root, port, instance_id, experiment_id, token):
 
 
 def _read_json_retry(path, *, missing_ok=False):
-    """Retry only a read of replaceable metadata; never retry authentication."""
+    """Read a metadata object with up to nine attempts, optionally returning an empty dict
+    when every attempt finds it missing.
+    """
     only_missing = True
     for attempt in range(9):
         try:
@@ -450,6 +502,8 @@ def _read_json_retry(path, *, missing_ok=False):
 
 
 def heartbeat(root, experiment_id, token):
+    """Authenticate the experiment identity and update its owner heartbeat timestamp."""
+
     path = directory(root, experiment_id)
     state = _read_json_retry(path / 'experiment.json')
     if state.get('experiment_id', experiment_id) != experiment_id:
@@ -464,24 +518,40 @@ def heartbeat(root, experiment_id, token):
     write(path / 'heartbeat.json', {'wall_ns': time.time_ns(), 'experiment_id': experiment_id})
 
 
+# _LEASE_OBSERVATIONS: dict[tuple[str, str], dict], keyed by resolved data root and experiment
+# ID.
 _LEASE_OBSERVATIONS = {}
 
 
 class _HeartbeatIdentityMismatch(ValueError):
+    """Identify a heartbeat file whose explicit experiment ID differs from the requested
+    owner.
+
+    lease_expired() catches this ValueError subclass, records identity_mismatch
+    in the cached observation, and reports the lease expired.
+
+    Example, after reading the heartbeat identity:
+        raise _HeartbeatIdentityMismatch('Heartbeat belongs to another experiment')
+
+    This distinguishes a different experiment's heartbeat from a transient
+    metadata read error.
+    """
+
     pass
 
 
 def lease_expired(root, experiment_id, seconds):
-    """A failed read is uncertainty, not a renewed lease or supervisor crash.
+    """Report whether the owner heartbeat has aged beyond the configured lease interval.
 
-    Successful heartbeat timestamps retain a monotonic observation anchor. Read
-    failures never move that anchor. With no prior successful read, inaccessible
-    or corrupt data gets one bounded lease window; confirmed missing data does
-    not manufacture a lease. Existing heartbeat files without explicit identity
-    remain supported, scoped by their validated experiment directory.
+    Cache each new heartbeat timestamp with its wall-time age and a monotonic
+    observation anchor. Repeated timestamps and failed reads age from that
+    anchor. An initial unreadable/corrupt file starts one bounded observation
+    window; confirmed absence or an explicit identity mismatch reports expiry.
     """
     path = directory(root, experiment_id) / 'heartbeat.json'
     key = (str(Path(root).resolve()), experiment_id)
+    # observed is the shared mutable timing record retained across lease_expired() calls for
+    # this owner.
     observed = _LEASE_OBSERVATIONS.setdefault(key, {})
     failure = None
     for attempt in range(9):
@@ -499,6 +569,8 @@ def lease_expired(root, experiment_id, seconds):
             if stamp > now_wall:
                 raise ValueError('Heartbeat timestamp is in the future')
             if observed.get('wall_ns') != stamp:
+                # A new timestamp resets the observation anchor; later elapsed time uses this
+                # monotonic reference.
                 observed.update(
                     wall_ns=stamp, observed_wall_ns=now_wall, observed_monotonic=now_mono
                 )

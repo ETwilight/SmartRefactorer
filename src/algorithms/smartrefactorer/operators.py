@@ -1,8 +1,8 @@
-"""Stage input construction, not model transport or a second state machine.
+"""Build the context for each development operator and record its answer.
 
-Each stage owns its instruction string. This module selects the relevant source
-view and records raw operator outputs while the injected adapter owns prompts,
-provider errors, context continuations and actual metering.
+Code-producing operators receive the target, its dependencies, and prerequisite
+edits, together with a catalog of other components. Propose receives the check
+schema and export instructions. The injected ask callback performs the model call.
 """
 
 import copy
@@ -25,7 +25,9 @@ ROLE_GUIDES = {
 
 
 def operator(controller, role, context):
-    """Invoke a declared stage contract and retain its exact output history."""
+    """Build the role context, call ask(role, instructions, context), and append its output
+    history.
+    """
     state = controller.state
     if role == 'Propose':
         context = {
@@ -36,6 +38,8 @@ def operator(controller, role, context):
         }
     if role in ('CodeGen', 'Rewrite', 'Patch') and 'candidate' in context:
         context = copy.deepcopy(context)
+        # all_components: dict[str, Component], retained while the source view below is
+        # narrowed.
         all_components = context['candidate']
         target = (context.get('edit') or {}).get('target') or (
             context.get('component') or {}
@@ -54,6 +58,8 @@ def operator(controller, role, context):
             n: {k: c.get(k) for k in ('id', 'hash', 'interface', 'contract', 'dependencies')}
             for n, c in all_components.items()
         }
+        # candidate now contains the target and required source records; component_catalog still
+        # lists all IDs.
         context['candidate'] = {n: c for n, c in all_components.items() if n in needed}
         context['source_access'] = (
             'Other complete sources are available with read_source. Full proposal and prior outputs are readable through development_history.'
@@ -72,6 +78,7 @@ def operator(controller, role, context):
     profile = LANGUAGE
     if role == 'Propose':
         profile += ' Return library_exports as an explicit list, or [] for task-only code. task_entry.argument_bindings is a JSON invocation template: {"$public":"/path"} reads a supplied public JSON Pointer, {"$evidence":{"id":"64hex","path":"/path"}} reads exact evidence, and {"$literal":value} escapes reserved syntax. Other literals remain literal. No implicit runtime.* values exist. Host callable parameters are declared separately in the component interface.host_bindings.'
+    # value: dict, the parsed operator record returned by the adapter's model client.
     value = controller.ask(role, ROLE_GUIDES[role] + '\n' + profile, context)
     state.operator_history.append(
         {'role': role, 'input_hash': digest(context), 'output': value}

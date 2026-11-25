@@ -1,4 +1,6 @@
-"""One entry point for isolated method plugins and capacity-aware environment providers."""
+"""Build run configurations, check method dependencies, and submit jobs to the capacity
+queue.
+"""
 
 import argparse
 import json
@@ -15,6 +17,8 @@ RESEARCH = Path(__file__).resolve().parents[1]
 
 
 def interpreter(method):
+    """Return the selected method's installed project-local Python interpreter."""
+
     environments = {
         'baseline': '.venvs/techmc',
         'psn': '.venvs/psn',
@@ -30,6 +34,8 @@ def interpreter(method):
 
 
 def parser():
+    """Build the run, batch, and status argument parsers."""
+
     result = argparse.ArgumentParser(description=__doc__)
     sub = result.add_subparsers(dest='action', required=True)
     for action in ('run', 'batch'):
@@ -123,11 +129,15 @@ def parser():
 
 
 def main(argv=None):
+    """Validate arguments, write launch files, and either finish checks or dispatch the
+    configured jobs.
+    """
+
     arguments = list(sys.argv[1:] if argv is None else argv)
     if '--method' in arguments and arguments[
         arguments.index('--method') + 1 : arguments.index('--method') + 2
     ] == ['smartrefactorer']:
-        # SR owns its admission and continuation rules and its interpreter.
+        # Delegate SR launches to its CLI and interpreter.
         return subprocess.run(
             [
                 str(interpreter('smartrefactorer')),
@@ -159,6 +169,8 @@ def main(argv=None):
     methods = [args.method] if args.action == 'run' else args.methods
     if len(set(methods)) != len(methods):
         argument_parser.error('Each method may appear only once per batch')
+    # resume_launch: dict | None, containing the explicitly selected parent's launch
+    # configuration.
     resume_launch = None
     if args.resume_recovery_receipt and not args.resume_from:
         argument_parser.error('--resume-recovery-receipt requires --resume-from')
@@ -191,8 +203,9 @@ def main(argv=None):
                 approval = approve(
                     source, method=methods[0], recovery_receipt=args.resume_recovery_receipt
                 )
-                # This is returned by the trusted provider after verification;
-                # never load an approval flag directly from the receipt JSON.
+                # The provider verifies the receipt and returns the approval for this source
+                # run.
+                # Validate that returned approval before loading continuation accounting.
                 if (
                     not isinstance(approval, dict)
                     or approval.get('verified') is not True
@@ -219,6 +232,8 @@ def main(argv=None):
     task_ids = None
     if args.task_sequence_file:
         try:
+            # task_ids becomes the decoded JSON value; the following check narrows it to a
+            # nonempty list[str].
             task_ids = json.loads(args.task_sequence_file.read_text(encoding='utf-8-sig'))
         except (OSError, ValueError) as exc:
             argument_parser.error('Cannot read task sequence: ' + str(exc))
@@ -229,6 +244,7 @@ def main(argv=None):
         ):
             argument_parser.error('Task sequence must be a nonempty JSON array of task IDs')
     batch = args.output_root / 'batches' / str(uuid.uuid4())
+    # jobs: list[dict], one queue record per selected method.
     jobs = []
     for method in methods:
         identifier = str(uuid.uuid4())
@@ -254,8 +270,8 @@ def main(argv=None):
         }
         if resume_launch is not None:
             options = dict(resume_launch.get('options', {}))
-            # Startup recovery receipts authenticate one exact parent checkpoint;
-            # they cannot be inherited by a later, successfully resumed segment.
+            # Recovery receipts identify one parent checkpoint.
+            # Select the current parent and receipt for this new continuation segment.
             for key in (
                 'baseline_resume_from',
                 'psn_resume_from',
@@ -299,7 +315,7 @@ def main(argv=None):
         )
         config_path = layout.root / 'launch.json'
         write(config_path, config)
-        # Dependency checks use each method's own interpreter and consume zero model tokens.
+        # Run dependency checks in the selected method's interpreter before queue admission.
         check = subprocess.run(
             [
                 str(interpreter(method)),

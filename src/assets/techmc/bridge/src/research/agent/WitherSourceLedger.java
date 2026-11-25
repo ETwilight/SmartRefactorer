@@ -7,24 +7,47 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.boss.wither.WitherBoss;
 import net.minecraft.world.level.block.Blocks;
 
-/** Read-only origin/proximity observations for real summoned and star-dropping withers. */
+/**
+ * Track wither pattern spawns and star-drop deaths with their bedrock proximity.
+ *
+ * A weak pending set connects the vanilla pattern callback to successful entity
+ * addition. UUID traces retain spawn and death observations across region reads.
+ * naturalSpawn records this observed pattern origin. Each event samples loaded
+ * bedrock positions within eight blocks; missing coverage marks the ledger incomplete.
+ *
+ * <pre>{@code
+ * Map<String, Object> sample = WitherSourceLedger.read(world, min, max);
+ * }</pre>
+ * The result reports spawn and death counts and their source observations in the region.
+ */
 public final class WitherSourceLedger {
     public static final int BEDROCK_RADIUS=8;
     private static final int LIMIT=65536;
     private static final String EPOCH=UUID.randomUUID().toString();
+    // Weak keys release entities whose pattern callback is not followed by a retained addition.
     private static final Set<WitherBoss> PENDING=Collections.newSetFromMap(new WeakHashMap<>());
     private static final Map<UUID,Trace> TRACES=new LinkedHashMap<>();
     private static final Set<String> ERRORS=new LinkedHashSet<>();
     private static boolean complete=true;
+    /**
+     * Capture one wither position, dimension, and nearby-bedrock result.
+     *
+     * <pre>{@code
+     * Event event = new Event(world, boss);
+     * }</pre>
+     * The snapshot is retained as the trace's spawn or death observation.
+     */
     private static final class Event {
         final String dimension;
         final List<Double> position;
         final boolean nearBedrock;
+        /** Sample the wither position and its bedrock proximity. */
         Event(ServerLevel world,WitherBoss boss) {
             dimension=world.dimension().identifier().toString();
             position=List.of(boss.getX(),boss.getY(),boss.getZ());
             nearBedrock=nearBedrock(world,boss);
         }
+        /** Check whether the event lies inside the inclusive block region in this dimension. */
         boolean in(ServerLevel world,BlockPos min,BlockPos max) {
             if(!dimension.equals(world.dimension().identifier().toString()))return false;
             return position.get(0)>=min.getX()&&position.get(0)<max.getX()+1.0
@@ -32,16 +55,28 @@ public final class WitherSourceLedger {
                 &&position.get(2)>=min.getZ()&&position.get(2)<max.getZ()+1.0;
         }
     }
+    /**
+     * Retain one wither UUID, observed pattern origin, and optional spawn/death events.
+     *
+     * <pre>{@code
+     * Trace trace = new Trace(boss.getUUID(), fromPattern);
+     * trace.spawn = new Event(world, boss);
+     * }</pre>
+     * The trace links the entity's source and later star-drop death by UUID.
+     */
     private static final class Trace {
         final UUID uuid;
         final boolean naturalSpawn;
         Event spawn,death;
+        /** Initialize the wither identity and observed pattern-origin flag. */
         Trace(UUID uuid,boolean naturalSpawn){this.uuid=uuid;this.naturalSpawn=naturalSpawn;}
     }
+    /** Mark coverage incomplete and retain a bounded set of observer errors. */
     public static void unavailable(String reason) {
         complete=false;
         if(ERRORS.size()<32)ERRORS.add(reason);
     }
+    /** Inspect loaded block centers within the bedrock radius around the wither. */
     private static boolean nearBedrock(ServerLevel world,WitherBoss boss) {
         BlockPos center=boss.blockPosition();boolean unloaded=false;
         for(BlockPos pos:BlockPos.betweenClosed(center.offset(-BEDROCK_RADIUS,-BEDROCK_RADIUS,-BEDROCK_RADIUS),center.offset(BEDROCK_RADIUS,BEDROCK_RADIUS,BEDROCK_RADIUS))) {
@@ -53,7 +88,8 @@ public final class WitherSourceLedger {
         if(unloaded)unavailable("Wither bedrock proximity crossed unloaded chunks");
         return false;
     }
-    /** makeInvulnerable has a single vanilla caller: the soul-block/skull pattern. */
+
+    /** Retain the pattern-spawn marker until the entity-add callback. */
     public static void markPatternSpawn(WitherBoss boss) {
         try {
             if(!(boss.level() instanceof ServerLevel))return;
@@ -61,10 +97,12 @@ public final class WitherSourceLedger {
             PENDING.add(boss);
         } catch(RuntimeException ex){unavailable("Wither pattern observation failed: "+ex.getClass().getSimpleName());}
     }
-    /** Called only after ServerLevel confirms that addFreshEntity succeeded. */
+
+    /** Consume a pending source marker and record a successfully added wither. */
     public static void added(ServerLevel world,Entity entity,boolean accepted) {
         if(!(entity instanceof WitherBoss boss))return;
         try {
+            // Consume the object marker even when vanilla reports an unsuccessful addition.
             boolean fromPattern=PENDING.remove(boss);
             if(!accepted)return;
             if(TRACES.size()>=LIMIT&&!TRACES.containsKey(boss.getUUID())){unavailable("Wither source-ledger budget exceeded");return;}
@@ -72,10 +110,12 @@ public final class WitherSourceLedger {
             Trace trace=new Trace(boss.getUUID(),fromPattern);trace.spawn=new Event(world,boss);TRACES.put(trace.uuid,trace);
         } catch(RuntimeException ex){unavailable("Wither spawn observation failed: "+ex.getClass().getSimpleName());}
     }
-    /** WitherBoss.dropCustomDeathLoot is the vanilla path that emits a nether star. */
+
+    /** Record the vanilla star-drop death for an existing or previously untracked wither. */
     public static void starDeath(ServerLevel world,WitherBoss boss) {
         try {
             Trace trace=TRACES.get(boss.getUUID());
+            // A death without an observed spawn keeps its source flag false in the retained trace.
             if(trace==null) {
                 if(TRACES.size()>=LIMIT){unavailable("Wither source-ledger budget exceeded");return;}
                 trace=new Trace(boss.getUUID(),false);TRACES.put(trace.uuid,trace);
@@ -84,6 +124,7 @@ public final class WitherSourceLedger {
             trace.death=new Event(world,boss);
         } catch(RuntimeException ex){unavailable("Wither death observation failed: "+ex.getClass().getSimpleName());}
     }
+    /** Summarize in-region spawn and death observations with their complete UUID traces. */
     public static Map<String,Object> read(ServerLevel world,BlockPos min,BlockPos max) {
         long spawned=0,spawnedNear=0,deaths=0,deathsNear=0,untrackedDeaths=0;
         List<Object> events=new ArrayList<>(),nodes=new ArrayList<>();

@@ -1,4 +1,6 @@
-"""Generic isolated worker: resources and source pinning, no method branches."""
+"""Connect an allocated environment, archive declared sources, and run an injected method
+plugin.
+"""
 
 import hashlib
 import json
@@ -14,7 +16,9 @@ from runtime.lifecycle import managed_environment
 
 
 def source_files(roots):
-    """Archive only declared dependencies, including individually shared helpers."""
+    """Yield supported source files under the declared roots, excluding tests, dependencies,
+    and run data.
+    """
     for root in roots:
         root = Path(root)
         if root.is_file():
@@ -42,6 +46,10 @@ def source_files(roots):
 
 
 def run(config, preflight, methods, source_directories):
+    """Preflight, connect the environment, run the method, and close the connection in
+    finally.
+    """
+
     provider = preflight(config)
     layout = RunLayout(Path(config['run_dir'])).prepare()
     os.environ['EXPERIMENT_RUN_ID'] = layout.root.name
@@ -75,7 +83,9 @@ def run(config, preflight, methods, source_directories):
 
 
 def _run_connected(config, layout, provider, environment, methods, source_directories):
-    """Run under the single connection owner's finally, including source archival."""
+    """Archive sources, build the run context, execute the plugin, and save its report and
+    layout.
+    """
     options = {
         **config.get('options', {}),
         'auditor_factory': lambda folder: provider.auditor(folder, environment),
@@ -95,7 +105,9 @@ def _run_connected(config, layout, provider, environment, methods, source_direct
     )
     research = Path(__file__).resolve().parents[1]
     workspace = research.parent
+    # sources: dict[str, str], mapping workspace-relative source paths to SHA-256 hashes.
     sources = {}
+    # paths: list[Path], used by the source-change check during model calls.
     paths = []
     directories = source_directories
     for path in source_files(directories):

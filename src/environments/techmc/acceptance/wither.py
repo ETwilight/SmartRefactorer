@@ -1,4 +1,6 @@
-"""Actual vanilla wither-source and natural-bedrock death provenance."""
+"""Reconcile native wither-source events and natural-bedrock death counters with credited
+star output.
+"""
 
 FIELDS = (
     'spawned',
@@ -10,11 +12,17 @@ FIELDS = (
 
 
 def collect_wither_sources(readbacks):
+    """Combine disjoint natural-world readbacks with matching epoch/radius and reconcile
+    their event-derived counters.
+    """
+
     if not readbacks:
         raise RuntimeError('Wither-source telemetry unavailable')
     epoch = None
     radius = None
     totals = {k: 0 for k in FIELDS}
+    # events: set[tuple[str, str]], keyed by event kind and entity UUID across all regional
+    # readbacks.
     events = set()
     for value in readbacks:
         if (
@@ -41,6 +49,8 @@ def collect_wither_sources(readbacks):
             or value['untracked_deaths'] > value['deaths']
         ):
             raise RuntimeError('Inconsistent wither-source proximity counters')
+        # local: dict[str, int], recomputing this readback's counters from its individual entity
+        # events.
         local = {k: 0 for k in FIELDS}
         for event in value.get('events', []):
             key = (event['kind'], event['entity_uuid'])
@@ -69,6 +79,10 @@ def collect_wither_sources(readbacks):
 
 
 def natural_wither_output(start, end, credited_stars):
+    """Check credited new stars against newly recorded tracked wither deaths near natural
+    bedrock.
+    """
+
     if (
         not start.get('wither_source_complete')
         or not end.get('wither_source_complete')
@@ -76,6 +90,7 @@ def natural_wither_output(start, end, credited_stars):
         or start['wither_source_epoch'] != end.get('wither_source_epoch')
     ):
         raise RuntimeError('Wither-source ledger unavailable or restarted')
+    # delta: dict[str, int] of source-event increments during the measurement window.
     delta = {k: end['wither_sources'][k] - start['wither_sources'][k] for k in FIELDS}
     if any(n < 0 for n in delta.values()):
         raise RuntimeError('Wither-source counters decreased')

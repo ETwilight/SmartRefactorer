@@ -1,9 +1,13 @@
-"""Component-sensitive accounting and physically separate variant storage."""
+"""Match required item components and count variants in distinct physical storage slots."""
 
 import math
 
 
 def components_match(actual, expected):
+    """Check that actual components contain the expected key/value subtree, allowing
+    additional actual fields.
+    """
+
     return all(
         key in actual
         and (
@@ -16,6 +20,8 @@ def components_match(actual, expected):
 
 
 def physical_slots(snapshot):
+    """Return top-level inventory slots followed by their reported shulker-box child slots."""
+
     if snapshot.get('item_components_version') != 'item-components-v1':
         raise RuntimeError('Item component telemetry unavailable; update the server bridge')
     return snapshot['slots'] + [
@@ -24,7 +30,14 @@ def physical_slots(snapshot):
 
 
 def classified_counts(targets, declared, snapshots, ref_key):
+    """Count matching variant items while assigning each declared physical slot to one
+    variant.
+    """
+    # counts: dict[str, int], keyed by variant ID rather than base item ID.
+
     counts = {}
+    # owners: dict[str, str], mapping physical slot IDs to the variant owning their declared
+    # storage.
     owners = {}
     for target in targets:
         variant = target['id']
@@ -51,6 +64,8 @@ def classified_counts(targets, declared, snapshots, ref_key):
 
 
 def variant_stock(targets, region):
+    """Count each required variant in the region's item-component stock rows."""
+
     if 'component_item_counts' not in region:
         raise RuntimeError('Component stock telemetry unavailable; update the server bridge')
     return {
@@ -64,6 +79,10 @@ def variant_stock(targets, region):
 
 
 def validate_barter_components(snapshots, products):
+    """Check enchantment and potion components of the selected barter products in output
+    storage.
+    """
+
     for snapshot in snapshots.values():
         for slot in physical_slots(snapshot):
             if not slot['count'] or slot['item'] not in products:
@@ -98,8 +117,12 @@ def validate_barter_components(snapshots, products):
 
 
 def barter_balance(start, end, production, item_stock):
-    # One roll per consumed gold ingot. A roll yields only one item entry;
-    # max quantities are from the running 26.1 piglin barter loot table.
+    """Compute minimum barter rolls from per-product output caps and compare them with
+    observed gold-ingot consumption.
+    """
+    # Each credited product implies at least ceil(count / per-roll maximum) barter rolls.
+    # Compare the sum of those roll counts with the observed gold-ingot stock decrease.
+
     maximum = {
         'minecraft:quartz': 12,
         'minecraft:gravel': 16,

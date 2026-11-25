@@ -1,7 +1,5 @@
-"""结构化模型调用：编码上下文、统计输入、预留预算、发送请求并记录响应。
-
-observer 连接本次运行的计量账本。每次发送都有独立记录；响应状态、结构化输出
-解析和用量核算按顺序完成，调用方据此推进当前 operator。
+"""Encode structured model inputs, count tokens, record attempts, and validate Responses
+output.
 """
 
 import json
@@ -36,15 +34,20 @@ _TOKEN_COUNT_CANCELLATION = ContextVar('experiment_token_count_cancellation', de
 _TOKEN_COUNT_ATTEMPTS = 3
 _TOKEN_COUNT_MAX_BACKOFF = 30.0
 _TOKEN_COUNT_WAIT_SLICE = 1.0
-# Generation can legitimately take longer than a read-only token count. A lost
-# generation response is a pause boundary, not permission to resend this prompt.
+# Generation responses use a longer timeout than token counts.
+# A lost generation response pauses the run for inspection.
 _GENERATION_RESPONSE_TIMEOUT = 900
 
 
 def _lost_generation_response(exc):
+    """Recognize transport failures that can leave a submitted generation's response
+    unavailable.
+    """
+
     if isinstance(exc, urllib.error.HTTPError):
         return False
     if isinstance(exc, urllib.error.URLError):
+        # exc changes from URLError to its reason, which may be an exception or a string.
         exc = exc.reason
     return isinstance(
         exc,
@@ -62,6 +65,8 @@ CACHE_POLICY = 'explicit-stable-prefix-v1'
 
 
 def _context_length_exceeded(response):
+    """Check whether a provider response carries the context_length_exceeded error code."""
+
     return (
         isinstance(response, dict)
         and isinstance(response.get('error'), dict)
@@ -70,7 +75,7 @@ def _context_length_exceeded(response):
 
 
 def _pause_context_capacity(observer, stage, request, response, error, call=None):
-    """Managed Responses capacity refusal is a control boundary, not task failure."""
+    """Record a context-limit refusal and raise RunStopped when an observer manages the call."""
     if observer is None:
         return False
     from audit.control import RunStopped
@@ -112,17 +117,45 @@ def _pause_context_capacity(observer, stage, request, response, error, call=None
 
 
 class ModelOutputError(ValueError):
-    """A metered completed generation returned no usable structured decision."""
+    """Report unusable structured output from a completed, recorded generation.
+
+    response_id is the provider response ID, or None when unavailable. The
+    message describes the parsing or schema error. The caller can retain this
+    ID alongside its current operator phase and recorded usage.
+
+    Example:
+        raise ModelOutputError('Missing operator decision', response_id)
+
+    This reports an invalid decision while preserving the completed response's
+    identity for the caller's error record.
+    """
 
     def __init__(self, message, response_id=None):
+        """Set the error message and optional provider response ID."""
+
         super().__init__(message)
         self.response_id = response_id
 
 
 class ModelProviderStopped(RunStopped):
-    """A metered provider state is a control boundary, not malformed JSON."""
+    """Carry the provider response when generation ends outside the completed state.
+
+    response is a deep copy of the returned value. response_id, provider_status,
+    and incomplete_details expose its metadata when it is a dictionary. The
+    inherited RunStopped reason is operator_stop, which pauses the current run.
+
+    Example:
+        raise ModelProviderStopped(response)
+
+    The runner receives the partial response and status together with the stop
+    reason; recorded usage remains attached to the model call.
+    """
 
     def __init__(self, response):
+        """Copy the provider response, extract its status metadata, and initialize the run
+        stop.
+        """
+
         self.response = copy.deepcopy(response)
         metadata = response if isinstance(response, dict) else {}
         self.response_id = metadata.get('id')
@@ -137,6 +170,8 @@ class ModelProviderStopped(RunStopped):
 
 
 def _pause_provider_state(response, observer, call, scope):
+    """Record the provider status and raise a stop carrying its original response."""
+
     stopped = ModelProviderStopped(response)
     if observer is not None:
         try:
@@ -170,15 +205,17 @@ ENCODING_GUIDE = (
 
 
 def model_input(instructions, data):
-    """Cache immutable instructions/discovery, never the changing history tail.
+    """Build developer and user messages with explicit prompt-cache boundaries.
 
-    Each JSON part retains all original values. Decoding then merging the two
-    disjoint top-level objects reconstructs the exact original context.
+    Place discovery, when present, in its own user message and encode the
+    remaining context separately. Return the messages and a bool indicating
+    whether either JSON part uses shared-reference encoding.
     """
     stable = None
     if isinstance(data, dict) and data.get('discovery'):
         stable = {'discovery': data['discovery']}
         data = {k: v for k, v in data.items() if k != 'discovery'}
+    # content and guide: str; content is JSON text and guide describes its reference encoding.
     content, guide = encode(data)
     if stable is not None:
         static, static_guide = encode(stable)
@@ -216,7 +253,7 @@ def model_input(instructions, data):
 
 @contextmanager
 def observe_model_calls(observer):
-    """Host instrumentation only; no observer information enters model input."""
+    """Bind the current context's model recorder until this context manager exits."""
     token = _MODEL_OBSERVER.set(observer)
     try:
         yield
@@ -225,12 +262,23 @@ def observe_model_calls(observer):
 
 
 class TokenCountCancelled(RuntimeError):
-    """The owner of an asynchronous count stopped waiting for its result."""
+    """Signal cancellation of a token-count request by its owning caller.
+
+    The current token_count_cancellation context supplies the event checked
+    before attempts, during retry waits, and before returning the count.
+
+    Example:
+        with token_count_cancellation(cancelled):
+            count = count_input_tokens(payload, key)
+
+    When cancelled is set, the count operation raises TokenCountCancelled at
+    its next cancellation check and returns control to its owner.
+    """
 
 
 @contextmanager
 def token_count_cancellation(event):
-    """Propagate an owner's cancellation event through asyncio.to_thread."""
+    """Bind the owner's cancellation event across the count and any asyncio.to_thread call."""
     token = _TOKEN_COUNT_CANCELLATION.set(event)
     try:
         yield
@@ -239,15 +287,17 @@ def token_count_cancellation(event):
 
 
 def _token_count_transient(exc, managed=False):
-    # HTTPError is a URLError subclass: classify it before network failures.
-    # Rate limiting is temporary; other 4xx need caller intervention.
+    """Classify token-count failures for retry, including managed-run DNS recovery."""
+    # Check HTTPError before URLError because it inherits from URLError.
+    # Retry timeouts, rate limits, and server errors; other HTTP failures end the count.
+
     if isinstance(exc, urllib.error.HTTPError):
         return exc.code in (408, 429) or 500 <= exc.code < 600
     reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
     if isinstance(reason, ssl.SSLCertVerificationError):
         return False
-    # This function always targets the same valid provider hostname: managed
-    # runs can wait through DNS outages reported as EAI_NONAME/Windows 11001.
+    # Managed runs retry DNS failures for the configured provider hostname.
+    # Standalone counts retry only the temporary EAI_AGAIN DNS error.
     if isinstance(reason, socket.gaierror):
         return managed or reason.errno == socket.EAI_AGAIN
     if isinstance(
@@ -293,6 +343,8 @@ def _token_count_transient(exc, managed=False):
 
 
 def _token_count_guard(observer):
+    """Check owner cancellation and the current recorder or source-change callback."""
+
     cancellation = _TOKEN_COUNT_CANCELLATION.get()
     if cancellation is not None and cancellation.is_set():
         raise TokenCountCancelled('Input token count owner cancelled the operation')
@@ -309,6 +361,8 @@ def _token_count_guard(observer):
 
 
 def _token_count_event(observer, kind, **data):
+    """Check owner cancellation and emit a token-count event through the recorder."""
+
     cancellation = _TOKEN_COUNT_CANCELLATION.get()
     if cancellation is not None and cancellation.is_set():
         raise TokenCountCancelled('Input token count owner cancelled the operation')
@@ -317,11 +371,12 @@ def _token_count_event(observer, kind, **data):
 
 
 def count_input_tokens(payload, key):
-    """Await managed tokenizer recovery; standalone callers have finite retries.
+    """Return the provider's input token count for the generation payload.
 
-    This is a read-only count, before any generation reservation or paid POST.
-    A managed experiment stays in its current call/round while disconnected;
-    source/operator guards remain responsive during each backoff wait.
+    Managed calls wait through retryable failures; standalone calls make at
+    most three attempts. Retry delays double up to 30 seconds, with cancellation
+    and run checks between one-second wait slices. Counting precedes generation
+    budget reservation and uses the input_tokens endpoint.
     """
     body = {
         k: v
@@ -339,8 +394,8 @@ def count_input_tokens(payload, key):
     delay = 1.0
     while True:
         attempt += 1
-        # Guards run outside the retry handler: stop/revision exceptions are
-        # never reclassified as network failures or concealed in count errors.
+        # Check run and source state outside the network retry handler.
+        # Exceptions from these checks propagate directly to the caller.
         _token_count_guard(observer)
         _token_count_event(
             observer,
@@ -351,6 +406,7 @@ def count_input_tokens(payload, key):
         )
         try:
             with urllib.request.urlopen(request, timeout=180) as connection:
+                # count is a decoded JSON field; accept only a nonnegative int, excluding bool.
                 count = json.load(connection)['input_tokens']
             if not isinstance(count, int) or isinstance(count, bool) or count < 0:
                 raise ValueError('Provider input_tokens must be a nonnegative integer')
@@ -359,6 +415,8 @@ def count_input_tokens(payload, key):
                 raw = None
                 parsed = None
                 try:
+                    # raw changes from None to bytes; parsed below is the decoded JSON error
+                    # value.
                     raw = exc.read()
                     parsed = json.loads(raw)
                 except (ValueError, TypeError, OSError):
@@ -377,7 +435,7 @@ def count_input_tokens(payload, key):
                     )
                 if raw is not None:
                     exc.fp = io.BytesIO(raw)
-                    # HTTPError may cache a bound read method on first access.
+                    # Reset both the body stream and a read method cached by HTTPError.
                     exc.read = exc.fp.read
             transient = _token_count_transient(exc, managed)
             retry = transient and (managed or attempt < _TOKEN_COUNT_ATTEMPTS)
@@ -432,7 +490,9 @@ def count_input_tokens(payload, key):
 
 
 def ensure_model_available(preflight=False):
-    """Check credentials and host permission without token counting or a model call."""
+    """Return the configured API key after checking recorder permission and optional
+    preflight budget.
+    """
     key = os.environ.get('OPENAI_API_KEY')
     if not key or not key.strip():
         raise ValueError(
@@ -456,10 +516,12 @@ def ensure_model_available(preflight=False):
 
 
 def structured_call(instructions, data, schema, name, transport=None, max_output_tokens=4096):
-    """执行一次结构化模型调用并返回解析值与用量元数据。
+    """Return a schema-validated model value and its usage and transport metadata.
 
-    输入编码和 token 统计先于发送；observer 为每次尝试登记预算和响应，
-    随后解析 provider 状态和 JSON schema 结果。
+    Encode and count the input, reserve each attempt through the observer, and
+    record its response before interpreting provider status or output JSON.
+    The built-in transport pauses on lost generation responses. Eligible
+    transient failures use a new reservation within the same run and round.
     """
     key = ensure_model_available()
     inputs, encoded = model_input(instructions, data)
@@ -481,7 +543,7 @@ def structured_call(instructions, data, schema, name, transport=None, max_output
         )
     started = time.monotonic()
     input_tokens = count_input_tokens(payload, key) if observer else None
-    # 重试从同一份编码输入构造请求，每次发送各自登记调用与预留用量。
+    # Build retries from the same encoded input; record and reserve each attempt separately.
     original_payload = copy.deepcopy(payload)
     attempt = 0
     delay = 1.0
@@ -490,11 +552,11 @@ def structured_call(instructions, data, schema, name, transport=None, max_output
         _token_count_guard(observer)
         payload = copy.deepcopy(original_payload)
         call = observer.before_model(payload, name, input_tokens) if observer else None
-        # observer 将模型调用归入当前运行和轮次，计量完成后再解析业务输出。
+        # The observer records this attempt in the current run and round before output parsing.
         if observer:
             try:
-                # Only this built-in stateless text transport can attest no
-                # external generation side effects. Custom transports cannot.
+                # The built-in text transport supports bounded generation accounting.
+                # Custom transports supply their own accounting behavior.
                 if transport is None and hasattr(observer, 'authorize_bounded_generation'):
                     observer.authorize_bounded_generation(call)
                 if hasattr(observer, 'before_send'):
@@ -587,9 +649,9 @@ def structured_call(instructions, data, schema, name, transport=None, max_output
                         'Structured model request failed: ' + type(exc).__name__
                     ) from exc
                 raise
-            # Every lost response remains charged at its full reserved upper
-            # bound. The next attempt must fit a new reservation in the SAME
-            # run/round allocation; no budget renewal or task action occurred.
+            # The previous attempt retains its recorded charge.
+            # A retry needs a new reservation within the current run and round budgets.
+            # The task and operator phase remain at the interrupted call.
             _token_count_guard(observer)
             _token_count_event(
                 observer,
@@ -646,6 +708,7 @@ def structured_call(instructions, data, schema, name, transport=None, max_output
             for part in item.get('content', [])
             if part.get('type') == 'output_text'
         )
+        # text is str; value is the decoded JSON value validated against the requested schema.
         value = json.loads(text)
         Draft202012Validator(schema).validate(value)
     except (ValueError, TypeError, KeyError, AttributeError, ValidationError) as exc:

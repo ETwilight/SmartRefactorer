@@ -1,4 +1,6 @@
-"""Versioned public documents and small discovery views; never task solutions."""
+"""Publish versioned rule documents and project environment discovery into manifest and
+status views.
+"""
 
 import copy
 import hashlib
@@ -8,6 +10,8 @@ from pathlib import Path
 
 
 def _module(name):
+    """Import a TechMC module relative to the current package when available."""
+
     return importlib.import_module((__package__ + '.' if __package__ else '') + name)
 
 
@@ -20,6 +24,8 @@ Use environment.document with a document reference's id and sha256 to read its c
 
 
 def _hash(value):
+    """Hash the sorted, compact UTF-8 JSON representation of a document."""
+
     encoded = json.dumps(
         value, sort_keys=True, separators=(',', ':'), ensure_ascii=False
     ).encode('utf-8')
@@ -27,6 +33,10 @@ def _hash(value):
 
 
 def _store(environment):
+    """Load and verify the public document archive on first access, then return its cached
+    dictionary.
+    """
+
     if not hasattr(environment, '_public_documents'):
         path = Path(environment.session.directory) / 'public-documents.json'
         store = (
@@ -49,6 +59,8 @@ def _store(environment):
 
 
 def _reference(identifier, digest):
+    """Build a versioned document reference and its environment.document read request."""
+
     return {
         'id': identifier,
         'sha256': digest,
@@ -57,6 +69,9 @@ def _reference(identifier, digest):
 
 
 def _publish(environment, identifier, content):
+    """Store a copied document version, update its current hash, and return a read reference."""
+    # store: dict with versions (id@hash -> document) and current (id -> hash) mappings.
+
     store = _store(environment)
     digest = _hash(content)
     store['versions'][identifier + '@' + digest] = {
@@ -69,6 +84,10 @@ def _publish(environment, identifier, content):
 
 
 def _resource_content(environment, description):
+    """Resolve a resource-policy reference or partial presentation to its full document
+    content.
+    """
+
     resource = copy.deepcopy(description.get('resource_policy', {}))
     if resource.get('view') == 'reference':
         original = environment.ledger.get(resource.get('feedback_ref'), {}).get('response', {})
@@ -80,12 +99,16 @@ def _resource_content(environment, description):
 
 
 def manifest(environment, description):
-    """Project a description while retaining every referenced original document."""
+    """Build and persist a discovery manifest while holding the environment ledger lock."""
     with environment._ledger_lock:
         return _manifest(environment, description)
 
 
 def _manifest(environment, description):
+    """Publish rule and procedure documents, replace discovery payloads with references, and
+    save the archive.
+    """
+
     result = copy.deepcopy(description)
     guidance = description['agent_guidance']
     resource = _resource_content(environment, description)
@@ -157,13 +180,19 @@ def _manifest(environment, description):
 
 
 def document(environment, params, request_id):
+    """Read a public document version while holding the environment ledger lock."""
+
     with environment._ledger_lock:
         return _document(environment, params, request_id)
 
 
 def _document(environment, params, request_id):
+    """Refresh current documents when needed and return the requested document version."""
+    # store: dict with versions (id@hash -> document) and current (id -> hash) mappings.
+
     store = _store(environment)
     identifier = params['id']
+    # digest: str | None; an omitted hash selects the current published document version.
     digest = params.get('sha256')
     if digest is None or identifier not in store['current']:
         description = environment._dispatch(
@@ -180,7 +209,7 @@ def _document(environment, params, request_id):
 
 
 def status(environment):
-    """Current mutable facts; no procedure texts, API catalogue or rule archive."""
+    """Return current session, task-selection, progress, and resource-limit facts."""
     selection = (
         {'mode': 'task_stream', **environment.task_stream.public_state()}
         if environment.task_stream
@@ -212,6 +241,10 @@ def status(environment):
 
 
 def task_index(tasks):
+    """Project visible task definitions into compact entries with references to their full
+    requirements.
+    """
+
     keys = (
         'id',
         'title',
@@ -243,12 +276,16 @@ def task_index(tasks):
 
 
 def operation_schema(name, operation):
+    """Specialize the request schema for one public operation and its parameter contract."""
+
     contracts = _module('contracts')
     if name != 'request':
         raise ValueError('operation is supported only for the request schema')
     if operation not in contracts.OP_PARAMS:
         raise ValueError('Unknown operation: ' + str(operation))
     result = copy.deepcopy(contracts.SCHEMAS['request'])
+    # Replace the request schema's conditional operation clauses with one fixed operation and
+    # params schema.
     result.pop('allOf', None)
     result['properties']['op'] = {'const': operation}
     result['properties']['params'] = copy.deepcopy(contracts.OP_PARAMS[operation])

@@ -1,4 +1,4 @@
-"""One run namespace; method formats and checkpoint semantics remain method-owned."""
+"""Create each run directory and publish its shared report, event, and accounting views."""
 
 from dataclasses import dataclass
 import json
@@ -7,30 +7,54 @@ from pathlib import Path
 import shutil
 import uuid
 
-RESULTS_ROOT = Path(__file__).resolve().parents[1] / 'results'
+from .storage import RESULTS_ROOT
 
 
 @dataclass(frozen=True)
 class RunLayout:
+    """Name the method, environment, and report directories within one run.
+
+    root is the run's Path. Method state, checkpoints, and artifacts have separate
+    subdirectories; the owning method defines the contents and restore behavior.
+    prepare() creates the directories. finish() writes the shared layout and
+    accounting files, then copies the available report and event views.
+
+    Example:
+        layout = RunLayout(run_folder).prepare()
+        state_folder = layout.state
+
+    state_folder is where the method stores its own persistent state files.
+    """
+
     root: Path
 
     @property
     def state(self):
+        """Return the directory for persistent method state."""
+
         return self.root / 'method' / 'state'
 
     @property
     def checkpoints(self):
+        """Return the directory for method checkpoints and checkpoint references."""
+
         return self.root / 'method' / 'checkpoints'
 
     @property
     def artifacts(self):
+        """Return the directory for method-generated artifacts."""
+
         return self.root / 'method' / 'artifacts'
 
     @property
     def environment(self):
+        """Return the directory for this run's environment records."""
+
         return self.root / 'environment'
 
     def prepare(self):
+        """Create the run directories and return this layout."""
+
         for path in (
             self.root,
             self.state,
@@ -45,6 +69,8 @@ class RunLayout:
         return self
 
     def manifest(self):
+        """Describe the shared relative paths and explicit checkpoint selection policy."""
+
         return {
             'schema_version': 1,
             'state_owner': 'method',
@@ -56,7 +82,7 @@ class RunLayout:
         }
 
     def finish(self, report):
-        """Expose common evidence without converting algorithm-owned databases."""
+        """Write accounting and layout metadata, then copy available report and event files."""
         self.prepare()
         (self.root / 'layout.json').write_text(
             json.dumps(self.manifest(), indent=2) + '\n', encoding='utf-8'
@@ -96,6 +122,8 @@ class RunLayout:
 
 
 def run_identity(output_root=None):
+    """Choose a run ID, create its directory, and return the ID and directory Path."""
+
     explicit = os.environ.get('EXPERIMENT_RUN_ID')
     if explicit and not all(c.isalnum() or c in '-_' for c in explicit):
         raise ValueError('Invalid EXPERIMENT_RUN_ID')
